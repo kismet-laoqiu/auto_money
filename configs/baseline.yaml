@@ -6,7 +6,7 @@ objective:
   overfit_penalty_weight: 0.35
   drawdown_weight: 2.0
   calmar_weight: 0.35
-  annual_return_weight: 0.2
+  pnl_weight: 0.2
 
 strategy:
   fast_sma: 15

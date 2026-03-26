@@ -269,7 +269,7 @@ func ObjectiveScore(inSample, outOfSample Stats, objective config.ObjectiveConfi
 	if inSample.TotalReturn > outOfSample.TotalReturn {
 		overfitPenalty += (inSample.TotalReturn - outOfSample.TotalReturn) * objective.OverfitPenaltyWeight * 0.5
 	}
-	return outOfSample.Sharpe + objective.CalmarWeight*outOfSample.Calmar + objective.AnnualReturnWeight*outOfSample.CAGR - objective.DrawdownWeight*outOfSample.MaxDrawdown - overfitPenalty
+	return outOfSample.Sharpe + objective.CalmarWeight*outOfSample.Calmar + objective.PnLWeight*outOfSample.TotalReturn - objective.DrawdownWeight*outOfSample.MaxDrawdown - overfitPenalty
 }
 
 func AggregateReports(reports []Report) Aggregate {

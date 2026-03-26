@@ -22,7 +22,7 @@ type ObjectiveConfig struct {
 	OverfitPenaltyWeight float64 `yaml:"overfit_penalty_weight"`
 	DrawdownWeight       float64 `yaml:"drawdown_weight"`
 	CalmarWeight         float64 `yaml:"calmar_weight"`
-	AnnualReturnWeight   float64 `yaml:"annual_return_weight"`
+	PnLWeight            float64 `yaml:"pnl_weight"`
 }
 
 type StrategyConfig struct {
