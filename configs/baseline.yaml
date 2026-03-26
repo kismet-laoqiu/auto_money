@@ -9,8 +9,8 @@ objective:
   annual_return_weight: 0.2
 
 strategy:
-  fast_sma: 20
-  slow_sma: 50
+  fast_sma: 15
+  slow_sma: 60
   pivot_window: 3
   level_lookback: 90
   level_tolerance: 0.015
