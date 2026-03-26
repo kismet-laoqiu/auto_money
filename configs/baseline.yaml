@@ -82,3 +82,5 @@ stream:
 notify:
   enable: false
   dingtalk_webhook: ""
+  dingtalk_secret: ""
+  dingtalk_keyword: ""

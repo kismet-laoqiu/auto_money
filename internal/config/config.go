@@ -62,6 +62,8 @@ type StreamConfig struct {
 type NotifyConfig struct {
 	Enable          bool   `yaml:"enable"`
 	DingTalkWebhook string `yaml:"dingtalk_webhook"`
+	DingTalkSecret  string `yaml:"dingtalk_secret"`
+	DingTalkKeyword string `yaml:"dingtalk_keyword"`
 }
 
 func Load(path string) (Config, error) {

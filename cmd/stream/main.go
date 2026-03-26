@@ -1,7 +1,33 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"quantlab/internal/adapters"
+	"quantlab/internal/config"
+)
 
 func main() {
-	fmt.Println("bitget stream pipeline will be enabled after baseline strategy and notifier are verified")
+	fs := flag.NewFlagSet("stream", flag.ContinueOnError)
+	configPath := fs.String("config", "configs/baseline.yaml", "config file")
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := adapters.RunBitgetStream(ctx, cfg); err != nil && err != context.Canceled {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
