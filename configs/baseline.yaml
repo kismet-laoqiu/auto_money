@@ -1,0 +1,84 @@
+cache_dir: data
+artifact_dir: artifacts
+
+objective:
+  risk_free_rate: 0.0
+  overfit_penalty_weight: 0.35
+  drawdown_weight: 2.0
+  calmar_weight: 0.35
+  annual_return_weight: 0.2
+
+strategy:
+  fast_sma: 20
+  slow_sma: 50
+  pivot_window: 3
+  level_lookback: 90
+  level_tolerance: 0.015
+  fib_tolerance: 0.012
+  signal_threshold: 3.0
+  stop_atr: 1.4
+  reward_risk: 2.0
+  max_hold_bars: 20
+  cooldown_bars: 3
+  commission_bps: 8
+  slippage_bps: 3
+  atr_window: 14
+
+datasets:
+  - name: btc_swing
+    provider: binance
+    symbol: BTCUSDT
+    interval: 1d
+    limit: 1000
+  - name: eth_swing
+    provider: binance
+    symbol: ETHUSDT
+    interval: 1d
+    limit: 1000
+  - name: crcl_daily
+    provider: yahoo
+    symbol: CRCL
+    interval: 1d
+    range: 1y
+  - name: xauusd_daily
+    provider: stooq
+    symbol: xauusd
+    interval: 1d
+    range: 2y
+  - name: baba_daily
+    provider: yahoo
+    symbol: BABA
+    interval: 1d
+    range: 2y
+  - name: pdd_daily
+    provider: yahoo
+    symbol: PDD
+    interval: 1d
+    range: 2y
+  - name: zm_daily
+    provider: yahoo
+    symbol: ZM
+    interval: 1d
+    range: 2y
+  - name: mstr_daily
+    provider: yahoo
+    symbol: MSTR
+    interval: 1d
+    range: 2y
+  - name: bmnr_daily
+    provider: yahoo
+    symbol: BMNR
+    interval: 1d
+    range: 1y
+
+stream:
+  bitget_url: wss://ws.bitget.com/v2/ws/public
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+  interval: 1m
+  snapshot_limit: 300
+
+notify:
+  enable: false
+  dingtalk_webhook: ""

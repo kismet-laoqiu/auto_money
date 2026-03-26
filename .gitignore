@@ -1,0 +1,5 @@
+data/
+artifacts/
+metrics.json
+eval.err
+run.log
