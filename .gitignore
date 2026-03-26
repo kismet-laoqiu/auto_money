@@ -3,3 +3,4 @@ artifacts/
 metrics.json
 eval.err
 run.log
+._*
