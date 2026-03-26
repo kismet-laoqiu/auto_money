@@ -17,7 +17,7 @@ strategy:
   fib_tolerance: 0.012
   signal_threshold: 3.0
   stop_atr: 1.4
-  reward_risk: 2.0
+  reward_risk: 2.5
   max_hold_bars: 20
   cooldown_bars: 3
   commission_bps: 8
