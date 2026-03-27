@@ -141,11 +141,12 @@ func EvaluateSignal(bars []Bar, idx int, cfg config.StrategyConfig) Signal {
 	support, resistance := findNearestLevels(closePrice, pivots)
 	upSwing, hasUp, downSwing, hasDown := findRecentSwings(pivots)
 	waveLong, waveShort := waveBias(pivots)
+	features := ExtractFeatureSet(bars, idx, cfg)
 
 	longScore := 0.0
 	shortScore := 0.0
-	longReasons := make([]string, 0, 5)
-	shortReasons := make([]string, 0, 5)
+	longReasons := make([]string, 0, 8)
+	shortReasons := make([]string, 0, 8)
 
 	if fast > slow {
 		longScore += 1.25
@@ -186,6 +187,46 @@ func EvaluateSignal(bars []Bar, idx int, cfg config.StrategyConfig) Signal {
 	if waveShort {
 		shortScore += 1.0
 		shortReasons = append(shortReasons, "impulse-like lower highs/lows")
+	}
+
+	if features.Trigger.BreakRetestFlag {
+		if features.Trigger.CloseLocationValue >= 0.55 {
+			longScore += 0.15
+			longReasons = append(longReasons, "break retest")
+		}
+		if features.Trigger.CloseLocationValue <= 0.45 {
+			shortScore += 0.15
+			shortReasons = append(shortReasons, "break retest")
+		}
+	}
+	if features.Volume.VolumeAvailable {
+		if features.Volume.BreakoutVolumeConfirmed {
+			if longScore >= shortScore {
+				longScore += 0.25
+				longReasons = append(longReasons, "volume confirmed")
+			} else {
+				shortScore += 0.25
+				shortReasons = append(shortReasons, "volume confirmed")
+			}
+		}
+		if features.Volume.PullbackVolumeDryupFlag {
+			if features.Regime.TrendUpFlag || features.Fib.ActiveSwingDirection == "up" {
+				longScore += 0.25
+				longReasons = append(longReasons, "pullback volume dry-up")
+			}
+			if features.Regime.TrendDownFlag || features.Fib.ActiveSwingDirection == "down" {
+				shortScore += 0.25
+				shortReasons = append(shortReasons, "pullback volume dry-up")
+			}
+		}
+	}
+	if features.Regime.HighVolFlag && !features.Volume.BreakoutVolumeConfirmed {
+		longScore -= 0.10
+		shortScore -= 0.10
+	}
+	if features.Regime.CompressionFlag && !features.Trigger.BreakRetestFlag {
+		longScore -= 0.05
+		shortScore -= 0.05
 	}
 
 	threshold := cfg.SignalThreshold
