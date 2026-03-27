@@ -23,6 +23,23 @@ func (event TradeTickEvent) Symbol() string       { return event.SymbolValue }
 func (event TradeTickEvent) EventTime() time.Time { return event.Ts }
 func (event TradeTickEvent) Kind() string         { return "trade_tick" }
 
+type BarClosedEvent struct {
+	EventIDValue string
+	SymbolValue  string
+	Interval     string
+	Ts           time.Time
+	Open         float64
+	High         float64
+	Low          float64
+	Close        float64
+	Volume       float64
+}
+
+func (event BarClosedEvent) EventID() string      { return event.EventIDValue }
+func (event BarClosedEvent) Symbol() string       { return event.SymbolValue }
+func (event BarClosedEvent) EventTime() time.Time { return event.Ts }
+func (event BarClosedEvent) Kind() string         { return "bar_closed" }
+
 type MicroBarClosedEvent struct {
 	EventIDValue string
 	SymbolValue  string
