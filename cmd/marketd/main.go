@@ -23,6 +23,10 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if !cfg.Live.Enabled {
+		fmt.Fprintln(os.Stderr, "live.enabled=false")
+		os.Exit(1)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, cfg); err != nil && err != context.Canceled {
@@ -31,10 +35,7 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, cfg config.Config) error {
-	if !cfg.Live.Enabled {
-		return fmt.Errorf("live.enabled=false")
-	}
+func run(ctx context.Context, _ config.Config) error {
 	<-ctx.Done()
 	return ctx.Err()
 }
