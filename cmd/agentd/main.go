@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"quantlab/internal/agent"
 	"quantlab/internal/config"
 )
 
@@ -35,7 +36,23 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, _ config.Config) error {
+func newService(cfg config.Config) (*agent.Service, error) {
+	if !cfg.Live.Agent.AdvisoryOnly {
+		return nil, fmt.Errorf("agentd requires live.agent.advisory_only=true")
+	}
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	client := agent.NewHTTPResponsesClient(agent.HTTPClientConfig{APIKey: apiKey})
+	return agent.NewService(client, agent.Config{Store: true}), nil
+}
+
+func run(ctx context.Context, cfg config.Config) error {
+	if !cfg.Live.Agent.Enabled {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	if _, err := newService(cfg); err != nil {
+		return err
+	}
 	<-ctx.Done()
 	return ctx.Err()
 }
