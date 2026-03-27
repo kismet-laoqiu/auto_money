@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -40,6 +41,20 @@ func TestAppendEventAllowsNilPayload(t *testing.T) {
 	}
 	if got := readEventPayload(t, store, evt.EventID()); got != "null" {
 		t.Fatalf("unexpected nil payload encoding: %s", got)
+	}
+}
+
+func TestNewStoreCreatesParentDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nested", "demo", "live-state.db")
+	store, err := NewStore(path)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	if store == nil {
+		t.Fatalf("expected store instance")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("stat db path: %v", err)
 	}
 }
 

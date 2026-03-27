@@ -6,6 +6,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -28,6 +30,9 @@ type LiveStore interface {
 }
 
 func NewStore(path string) (*Store, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, err
