@@ -44,10 +44,14 @@ func NewStore(path string) (*Store, error) {
 }
 
 func (store *Store) AppendEvent(ctx context.Context, evt market.MarketEvent, raw []byte) error {
+	payload := raw
+	if payload == nil {
+		payload = []byte("null")
+	}
 	_, err := store.db.ExecContext(ctx, `
         INSERT INTO market_event_log (event_id, source, symbol, event_kind, exchange_ts, received_ts, payload_json)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, evt.EventID(), "market", evt.Symbol(), evt.Kind(), evt.EventTime().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano), raw)
+    `, evt.EventID(), "market", evt.Symbol(), evt.Kind(), evt.EventTime().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano), payload)
 	return err
 }
 
