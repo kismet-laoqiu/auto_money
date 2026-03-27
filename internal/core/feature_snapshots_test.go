@@ -21,8 +21,17 @@ type snapshotCase struct {
 }
 
 var (
-	cachedConfig   config.Config
-	cachedDatasets map[string]core.Dataset
+	cachedConfig     config.Config
+	cachedDatasets   map[string]core.Dataset
+	snapshotStrategy = config.StrategyConfig{
+		FastSMA:        15,
+		SlowSMA:        60,
+		PivotWindow:    3,
+		LevelLookback:  90,
+		LevelTolerance: 0.012,
+		FibTolerance:   0.012,
+		ATRWindow:      14,
+	}
 )
 
 func TestWaveStructureSnapshots(t *testing.T) {
@@ -241,7 +250,7 @@ func waveSnapshot(name, symbol, date, want string) snapshotCase {
 		date:   date,
 		want:   want,
 		build: func(dataset core.Dataset, idx int, cfg config.Config) any {
-			return core.ExtractWaveStructureFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, maxInt(cfg.Strategy.LevelLookback, cfg.Strategy.SlowSMA*2), 0.02)
+			return core.ExtractWaveStructureFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, maxInt(snapshotStrategy.LevelLookback, snapshotStrategy.SlowSMA*2), 0.02)
 		},
 	}
 }
@@ -253,7 +262,7 @@ func levelSnapshot(name, symbol, date, want string) snapshotCase {
 		date:   date,
 		want:   want,
 		build: func(dataset core.Dataset, idx int, cfg config.Config) any {
-			return core.ExtractLevelClusterFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, cfg.Strategy.LevelLookback, cfg.Strategy.LevelTolerance)
+			return core.ExtractLevelClusterFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, snapshotStrategy.LevelLookback, snapshotStrategy.LevelTolerance)
 		},
 	}
 }
@@ -265,8 +274,8 @@ func fibSnapshot(name, symbol, date, want string) snapshotCase {
 		date:   date,
 		want:   want,
 		build: func(dataset core.Dataset, idx int, cfg config.Config) any {
-			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, cfg.Strategy.LevelLookback, cfg.Strategy.LevelTolerance)
-			return core.ExtractFibConfluenceFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, maxInt(cfg.Strategy.LevelLookback, cfg.Strategy.SlowSMA*2), cfg.Strategy.FibTolerance, levels)
+			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, snapshotStrategy.LevelLookback, snapshotStrategy.LevelTolerance)
+			return core.ExtractFibConfluenceFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, maxInt(snapshotStrategy.LevelLookback, snapshotStrategy.SlowSMA*2), snapshotStrategy.FibTolerance, levels)
 		},
 	}
 }
@@ -278,9 +287,9 @@ func triggerSnapshot(name, symbol, date, want string) snapshotCase {
 		date:   date,
 		want:   want,
 		build: func(dataset core.Dataset, idx int, cfg config.Config) any {
-			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, cfg.Strategy.LevelLookback, cfg.Strategy.LevelTolerance)
-			fib := core.ExtractFibConfluenceFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, maxInt(cfg.Strategy.LevelLookback, cfg.Strategy.SlowSMA*2), cfg.Strategy.FibTolerance, levels)
-			return core.ExtractPriceActionTriggerFeatures(dataset.Bars, idx, cfg.Strategy.ATRWindow, levels, fib)
+			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, snapshotStrategy.LevelLookback, snapshotStrategy.LevelTolerance)
+			fib := core.ExtractFibConfluenceFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, maxInt(snapshotStrategy.LevelLookback, snapshotStrategy.SlowSMA*2), snapshotStrategy.FibTolerance, levels)
+			return core.ExtractPriceActionTriggerFeatures(dataset.Bars, idx, snapshotStrategy.ATRWindow, levels, fib)
 		},
 	}
 }
@@ -292,10 +301,10 @@ func volumeSnapshot(name, symbol, date, want string) snapshotCase {
 		date:   date,
 		want:   want,
 		build: func(dataset core.Dataset, idx int, cfg config.Config) any {
-			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, cfg.Strategy.LevelLookback, cfg.Strategy.LevelTolerance)
-			fib := core.ExtractFibConfluenceFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, maxInt(cfg.Strategy.LevelLookback, cfg.Strategy.SlowSMA*2), cfg.Strategy.FibTolerance, levels)
-			trigger := core.ExtractPriceActionTriggerFeatures(dataset.Bars, idx, cfg.Strategy.ATRWindow, levels, fib)
-			return core.ExtractVolumeConfirmationFeatures(dataset.Bars, idx, maxInt(cfg.Strategy.ATRWindow*2, 20), trigger)
+			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, snapshotStrategy.LevelLookback, snapshotStrategy.LevelTolerance)
+			fib := core.ExtractFibConfluenceFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, maxInt(snapshotStrategy.LevelLookback, snapshotStrategy.SlowSMA*2), snapshotStrategy.FibTolerance, levels)
+			trigger := core.ExtractPriceActionTriggerFeatures(dataset.Bars, idx, snapshotStrategy.ATRWindow, levels, fib)
+			return core.ExtractVolumeConfirmationFeatures(dataset.Bars, idx, maxInt(snapshotStrategy.ATRWindow*2, 20), trigger)
 		},
 	}
 }
@@ -307,9 +316,9 @@ func regimeSnapshot(name, symbol, date, want string) snapshotCase {
 		date:   date,
 		want:   want,
 		build: func(dataset core.Dataset, idx int, cfg config.Config) any {
-			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, cfg.Strategy.LevelLookback, cfg.Strategy.LevelTolerance)
-			wave := core.ExtractWaveStructureFeatures(dataset.Bars, idx, cfg.Strategy.PivotWindow, maxInt(cfg.Strategy.LevelLookback, cfg.Strategy.SlowSMA*2), 0.02)
-			return core.ExtractRegimeTags(dataset.Bars, idx, cfg.Strategy.FastSMA, cfg.Strategy.SlowSMA, cfg.Strategy.ATRWindow, maxInt(cfg.Strategy.LevelLookback, cfg.Strategy.SlowSMA*2), levels, wave)
+			levels := core.ExtractLevelClusterFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, snapshotStrategy.LevelLookback, snapshotStrategy.LevelTolerance)
+			wave := core.ExtractWaveStructureFeatures(dataset.Bars, idx, snapshotStrategy.PivotWindow, maxInt(snapshotStrategy.LevelLookback, snapshotStrategy.SlowSMA*2), 0.02)
+			return core.ExtractRegimeTags(dataset.Bars, idx, snapshotStrategy.FastSMA, snapshotStrategy.SlowSMA, snapshotStrategy.ATRWindow, maxInt(snapshotStrategy.LevelLookback, snapshotStrategy.SlowSMA*2), levels, wave)
 		},
 	}
 }
