@@ -1,0 +1,71 @@
+package trader
+
+import (
+	"testing"
+	"time"
+
+	"quantlab/internal/config"
+	"quantlab/internal/core"
+	"quantlab/internal/market"
+)
+
+func TestEngineTurnsClosedBarIntoCandidate(t *testing.T) {
+	strategy := &stubStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 62000, Stop: 61000, Target: 64000, Reasons: []string{"legacy"}}}
+	engine := NewEngine(Config{ArmingState: ArmingSafe, Strategy: strategy})
+	cmds, err := engine.Advance(market.BarClosedEvent{SymbolValue: "BTCUSDT", Interval: "1m", Ts: time.Unix(1710000000, 0), Open: 61900, High: 62100, Low: 61850, Close: 62000, Volume: 2})
+	if err != nil {
+		t.Fatalf("advance: %v", err)
+	}
+	if len(cmds) != 1 {
+		t.Fatalf("expected one command, got %d", len(cmds))
+	}
+	candidate, ok := cmds[0].(Candidate)
+	if !ok {
+		t.Fatalf("unexpected command type %T", cmds[0])
+	}
+	if candidate.Symbol != "BTCUSDT" || candidate.Interval != "1m" {
+		t.Fatalf("unexpected candidate identity: %+v", candidate)
+	}
+	if candidate.Score != 4.2 || candidate.Side != core.Long {
+		t.Fatalf("unexpected candidate signal: %+v", candidate)
+	}
+	if strategy.calls != 1 || len(strategy.bars) != 1 {
+		t.Fatalf("strategy did not observe the closed bar: calls=%d bars=%d", strategy.calls, len(strategy.bars))
+	}
+}
+
+func TestLegacyRuleProfileDelegatesToSignalFn(t *testing.T) {
+	called := false
+	profile := LegacyRuleProfile{
+		StrategyCfg: config.StrategyConfig{FastSMA: 3},
+		Evaluate: func(bars []core.Bar, idx int, cfg config.StrategyConfig) core.Signal {
+			called = true
+			if len(bars) != 2 || idx != 1 {
+				t.Fatalf("unexpected bars passed to signal fn: len=%d idx=%d", len(bars), idx)
+			}
+			if cfg.FastSMA != 3 {
+				t.Fatalf("unexpected strategy cfg: %+v", cfg)
+			}
+			return core.Signal{Side: core.Long, Score: 3.3, Entry: 101, Stop: 99, Target: 104, Reasons: []string{"delegated"}}
+		},
+	}
+	signal := profile.OnBar("BTCUSDT", "1m", []core.Bar{{Close: 100}, {Close: 101}})
+	if !called {
+		t.Fatalf("expected custom signal fn to be called")
+	}
+	if signal.Side != core.Long || signal.Score != 3.3 {
+		t.Fatalf("unexpected signal: %+v", signal)
+	}
+}
+
+type stubStrategy struct {
+	calls  int
+	bars   []core.Bar
+	signal core.Signal
+}
+
+func (strategy *stubStrategy) OnBar(symbol, interval string, bars []core.Bar) core.Signal {
+	strategy.calls++
+	strategy.bars = append([]core.Bar(nil), bars...)
+	return strategy.signal
+}
