@@ -7,8 +7,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"quantlab/internal/config"
+	"quantlab/internal/exchange/bitget"
+	"quantlab/internal/market"
+	sqlitepkg "quantlab/internal/store/sqlite"
 )
 
 func main() {
@@ -35,7 +39,17 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, _ config.Config) error {
-	<-ctx.Done()
+func run(ctx context.Context, cfg config.Config) error {
+	store, err := sqlitepkg.NewStore(cfg.Live.Runtime.StateDBPath)
+	if err != nil {
+		return err
+	}
+	_ = store
+	feed := market.NewPublicFeed(nil, market.PublicDecoder(bitget.DecodePublicEvents), market.NewMicroBarAggregator(time.Second))
+	for event := range feed.Events(ctx) {
+		if err := store.AppendEvent(ctx, event, nil); err != nil {
+			return err
+		}
+	}
 	return ctx.Err()
 }

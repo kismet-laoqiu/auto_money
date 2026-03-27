@@ -9,6 +9,8 @@ import (
 	"syscall"
 
 	"quantlab/internal/config"
+	sqlitepkg "quantlab/internal/store/sqlite"
+	"quantlab/internal/trader"
 )
 
 func main() {
@@ -35,7 +37,13 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, _ config.Config) error {
+func run(ctx context.Context, cfg config.Config) error {
+	_, err := sqlitepkg.NewStore(cfg.Live.Runtime.StateDBPath)
+	if err != nil {
+		return err
+	}
+	engine := trader.NewEngine(trader.Config{ArmingState: trader.ArmingState(cfg.Live.Runtime.ArmingState)})
+	_ = engine
 	<-ctx.Done()
 	return ctx.Err()
 }
