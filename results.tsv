@@ -1,0 +1,31 @@
+experiment	commit	metric	status	description
+0	e713761	0.160872767109	baseline	unmodified code
+1	459a0ae	-0.171647246561	discard	batch2 threshold 2.75
+2	0d7bdaa	0.657993841051	keep	batch2 threshold 3.25
+3	b22d1eb	-0.210284880264	discard	batch2 threshold 2.50
+4	7ee2c0b	-0.751052090237	discard	batch2 threshold 3.50
+5	e5a9820	0.573697776132	discard	batch3 fast sma 12
+6	682e80f		crash	batch3 fast sma 18
+7	3312049		crash	batch3 fast sma 21
+8	f6d1c7c	0.363918404876	discard	batch3 slow sma 50
+9	d90ee32	0.109456558450	discard	batch3 slow sma 72
+10	857a81a	0.116573397730	discard	batch3 slow sma 84
+11	ca18f23	0.674806210401	keep	batch2 stop atr 1.0
+12	900027e	0.177430252866	discard	batch2 stop atr 1.4
+13	370fb2d	0.324116354813	discard	batch2 stop atr 1.6
+14	839537d	0.545180182000	discard	batch4 reward risk 2.0
+15	2dff4e7	0.847894458022	keep	batch4 reward risk 3.0
+16	bd701b8	0.654243560213	discard	batch4 reward risk 3.5
+17	2e512ff	0.672130916564	discard	batch4 hold 15
+18	6e234ac	0.631976089839	discard	batch4 hold 25
+19	c3b3c18	0.283020728121	discard	batch4 hold 30
+20	45f0db6	0.256512798651	discard	batch5 cooldown 1
+21	78e5c98	-0.032488658983	discard	batch5 cooldown 5
+22	6859fae		crash	batch3 pivot window 2
+23	faca6eb		crash	batch3 pivot window 4
+24	a6cff38		crash	batch3 pivot window 5
+25	56bb742	0.353589990366	discard	replay batch3 fast sma 18
+26	3c7598d	0.283906946951	discard	replay batch3 fast sma 21
+27	51022bd	0.125139589739	discard	replay batch3 pivot window 2
+28	9d2069f	-0.230162554591	discard	replay batch3 pivot window 4
+29	27f74fa	0.051969731947	discard	replay batch3 pivot window 5
