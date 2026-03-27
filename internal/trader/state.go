@@ -23,8 +23,12 @@ const (
 )
 
 type SymbolState struct {
-	Phase    Phase `json:"phase,omitempty"`
-	Tranches int   `json:"tranches,omitempty"`
+	Phase         Phase   `json:"phase,omitempty"`
+	Tranches      int     `json:"tranches,omitempty"`
+	ContextOK     bool    `json:"context_ok,omitempty"`
+	RSI14         float64 `json:"rsi14,omitempty"`
+	NeedleDropPct float64 `json:"needle_drop_pct,omitempty"`
+	ReclaimPct    float64 `json:"reclaim_pct,omitempty"`
 }
 
 type EngineState struct {

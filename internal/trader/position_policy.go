@@ -23,3 +23,10 @@ func (policy *PositionPolicy) DecideAdd(state SymbolState, candidate Candidate) 
 	}
 	return AddDecision{Allow: true}
 }
+
+func (policy *PositionPolicy) DesiredPhase(profile Profile) Phase {
+	if profile != nil && profile.Name() == "needle_capture" {
+		return PhaseProbeLong
+	}
+	return PhaseWatching
+}

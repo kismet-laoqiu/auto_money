@@ -13,3 +13,13 @@ func TestPositionPolicyLimitsTrancheCount(t *testing.T) {
 		t.Fatalf("unexpected decision: %+v", decision)
 	}
 }
+
+func TestPositionPolicyUsesProbePhaseForNeedleCapture(t *testing.T) {
+	policy := NewPositionPolicy(PolicyConfig{MaxTranches: 3})
+	if got := policy.DesiredPhase(NeedleCaptureProfile{}); got != PhaseProbeLong {
+		t.Fatalf("unexpected needle phase: %s", got)
+	}
+	if got := policy.DesiredPhase(LeftAccumulationProfile{}); got != PhaseWatching {
+		t.Fatalf("unexpected accumulation phase: %s", got)
+	}
+}

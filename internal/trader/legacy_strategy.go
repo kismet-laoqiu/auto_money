@@ -12,6 +12,10 @@ type LegacyRuleProfile struct {
 	Evaluate    SignalFunc
 }
 
+func (profile LegacyRuleProfile) Name() string {
+	return "legacy_rule"
+}
+
 func (profile LegacyRuleProfile) OnBar(symbol, interval string, bars []core.Bar) core.Signal {
 	if len(bars) == 0 {
 		return core.Signal{Side: core.Flat}

@@ -51,6 +51,9 @@ type PriceActionTriggerFeatures struct {
 	RangeExpansionRatio  float64 `json:"range_expansion_ratio"`
 	BreakRetestFlag      bool    `json:"break_retest_flag"`
 	TriggerQualityScore  float64 `json:"trigger_quality_score"`
+	RSI14                float64 `json:"rsi14"`
+	NeedleDropPct        float64 `json:"needle_drop_pct"`
+	ReclaimPct           float64 `json:"reclaim_pct"`
 }
 
 type VolumeConfirmationFeatures struct {
@@ -320,6 +323,9 @@ func ExtractPriceActionTriggerFeatures(bars []Bar, idx, atrWindow int, levels Le
 	features.BearishEngulfingFlag = bearishEngulfing(prev, curr)
 	features.PinBarBullScore = pinBarScore(curr, true)
 	features.PinBarBearScore = pinBarScore(curr, false)
+	features.RSI14 = rsiAt(bars, idx, 14)
+	features.NeedleDropPct = needleDropPct(prev, curr)
+	features.ReclaimPct = reclaimRatio(prev, curr)
 
 	if levels.resistanceUpper > 0 {
 		margin := math.Max(levels.resistanceUpper-levels.resistanceLower, curr.Close*0.002)
@@ -350,6 +356,15 @@ func ExtractPriceActionTriggerFeatures(bars []Bar, idx, atrWindow int, levels Le
 	}
 	if fib.ValidFibContext && fib.FibZoneHitCount > 0 {
 		quality += 0.3 + math.Min(0.4, fib.FibClusterOverlapScore*0.15)
+	}
+	if features.RSI14 > 0 && features.RSI14 < 28 {
+		quality += 0.25
+	}
+	if features.NeedleDropPct >= 1.5 {
+		quality += math.Min(0.35, features.NeedleDropPct*0.08)
+	}
+	if features.ReclaimPct >= 0.7 {
+		quality += 0.25
 	}
 	if features.CloseLocationValue > 0.35 && features.CloseLocationValue < 0.65 {
 		quality -= 0.3
@@ -759,6 +774,53 @@ func pinBarScore(bar Bar, bullish bool) float64 {
 		score = math.Max(score, 1.0)
 	}
 	return clamp(score, 0, 1.5)
+}
+
+func rsiAt(bars []Bar, idx, window int) float64 {
+	if idx <= 0 || window <= 0 || idx < window {
+		return 0
+	}
+	gains := 0.0
+	losses := 0.0
+	for i := idx - window + 1; i <= idx; i++ {
+		change := bars[i].Close - bars[i-1].Close
+		if change > 0 {
+			gains += change
+			continue
+		}
+		losses -= change
+	}
+	if losses == 0 {
+		if gains == 0 {
+			return 50
+		}
+		return 100
+	}
+	rs := gains / losses
+	return 100 - 100/(1+rs)
+}
+
+func needleDropPct(prev, curr Bar) float64 {
+	ref := curr.Open
+	if prev.Close > ref {
+		ref = prev.Close
+	}
+	if ref <= 0 || curr.Low >= ref {
+		return 0
+	}
+	return (ref - curr.Low) / ref * 100
+}
+
+func reclaimRatio(prev, curr Bar) float64 {
+	ref := curr.Open
+	if prev.Close > ref {
+		ref = prev.Close
+	}
+	drop := ref - curr.Low
+	if drop <= 0 {
+		return 0
+	}
+	return clamp((curr.Close-curr.Low)/drop, 0, 1)
 }
 
 func percentileRank(values []float64, current float64) float64 {

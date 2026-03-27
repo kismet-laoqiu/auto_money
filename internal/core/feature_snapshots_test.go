@@ -143,7 +143,10 @@ func TestPriceActionTriggerSnapshots(t *testing.T) {
   "close_location_value": 0.8833962264150954,
   "range_expansion_ratio": 0.7131137975300506,
   "break_retest_flag": false,
-  "trigger_quality_score": 0.85
+  "trigger_quality_score": 1.1,
+  "rsi14": 71.2756600692258,
+  "needle_drop_pct": 0.313632211791904,
+  "reclaim_pct": 1
 }`),
 		triggerSnapshot("eth_2024_03_14", "ETHUSDT", "2024-03-14", `{
   "bullish_engulfing_flag": false,
@@ -153,7 +156,10 @@ func TestPriceActionTriggerSnapshots(t *testing.T) {
   "close_location_value": 0.5510799361066734,
   "range_expansion_ratio": 1.2451189307045667,
   "break_retest_flag": false,
-  "trigger_quality_score": 0.9629129275148285
+  "trigger_quality_score": 1.3129129275148286,
+  "rsi14": 72.8869281542895,
+  "needle_drop_pct": 7.036324002007595,
+  "reclaim_pct": 0.5631853507931432
 }`),
 		triggerSnapshot("crcl_2025_07_18", "CRCL", "2025-07-18", `{
   "bullish_engulfing_flag": false,
@@ -163,7 +169,10 @@ func TestPriceActionTriggerSnapshots(t *testing.T) {
   "close_location_value": 0.03186742643985047,
   "range_expansion_ratio": 1.8768791818870236,
   "break_retest_flag": false,
-  "trigger_quality_score": 1.4405073134751238
+  "trigger_quality_score": 1.790507313475124,
+  "rsi14": 63.67421722060755,
+  "needle_drop_pct": 9.150669237171433,
+  "reclaim_pct": 0.057563317879347244
 }`),
 	})
 }

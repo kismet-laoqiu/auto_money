@@ -217,8 +217,28 @@ func TestExtractPriceActionTriggerFeaturesPenalizesMidRangeClose(t *testing.T) {
 	}
 
 	got := ExtractPriceActionTriggerFeatures(bars, 1, 1, LevelClusterFeatures{}, FibConfluenceFeatures{})
-	if got.TriggerQualityScore >= 0.3 {
+	if got.TriggerQualityScore >= 0.5 {
 		t.Fatalf("expected weak trigger quality for middle close, got %+v", got)
+	}
+}
+
+func TestExtractPriceActionTriggerFeaturesAddsRSIAndNeedleMetrics(t *testing.T) {
+	bars := make([]Bar, 0, 18)
+	for i := 0; i < 17; i++ {
+		closeValue := 120 - float64(i)
+		bars = append(bars, testBar(i, closeValue+1, closeValue+2, closeValue-2, closeValue, 100))
+	}
+	bars = append(bars, testBar(17, 104, 105, 100, 103.5, 140))
+
+	got := ExtractPriceActionTriggerFeatures(bars, len(bars)-1, 14, LevelClusterFeatures{}, FibConfluenceFeatures{})
+	if got.RSI14 >= 28 {
+		t.Fatalf("expected oversold RSI, got %+v", got)
+	}
+	if got.NeedleDropPct < 3 {
+		t.Fatalf("expected needle drop percent, got %+v", got)
+	}
+	if got.ReclaimPct < 0.7 {
+		t.Fatalf("expected reclaim ratio, got %+v", got)
 	}
 }
 
