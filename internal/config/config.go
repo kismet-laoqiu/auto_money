@@ -15,6 +15,7 @@ type Config struct {
 	Datasets    []DatasetConfig `yaml:"datasets"`
 	Stream      StreamConfig    `yaml:"stream"`
 	Notify      NotifyConfig    `yaml:"notify"`
+	Live        LiveConfig      `yaml:"live"`
 }
 
 type ObjectiveConfig struct {
@@ -66,6 +67,49 @@ type NotifyConfig struct {
 	DingTalkKeyword string `yaml:"dingtalk_keyword"`
 }
 
+type LiveConfig struct {
+	Enabled  bool           `yaml:"enabled"`
+	Runtime  RuntimeConfig  `yaml:"runtime"`
+	Exchange ExchangeConfig `yaml:"exchange"`
+	Risk     RiskConfig     `yaml:"risk"`
+	Agent    AgentConfig    `yaml:"agent"`
+}
+
+type RuntimeConfig struct {
+	ArmingState string `yaml:"arming_state"`
+	StateDBPath string `yaml:"state_db_path"`
+	ObserveOnly bool   `yaml:"observe_only"`
+}
+
+type ExchangeConfig struct {
+	Venue         string             `yaml:"venue"`
+	ProductType   string             `yaml:"product_type"`
+	RESTBaseURL   string             `yaml:"rest_base_url"`
+	PublicWSURL   string             `yaml:"public_ws_url"`
+	PrivateWSURL  string             `yaml:"private_ws_url"`
+	APIKeyEnv     string             `yaml:"api_key_env"`
+	APISecretEnv  string             `yaml:"api_secret_env"`
+	PassphraseEnv string             `yaml:"passphrase_env"`
+	MarginMode    string             `yaml:"margin_mode"`
+	PositionMode  string             `yaml:"position_mode"`
+	Symbols       []LiveSymbolConfig `yaml:"symbols"`
+}
+
+type LiveSymbolConfig struct {
+	Symbol      string  `yaml:"symbol"`
+	MaxNotional float64 `yaml:"max_notional"`
+	MaxTranches int     `yaml:"max_tranches"`
+}
+
+type RiskConfig struct {
+	MaxLeverage int `yaml:"max_leverage"`
+}
+
+type AgentConfig struct {
+	Enabled      bool `yaml:"enabled"`
+	AdvisoryOnly bool `yaml:"advisory_only"`
+}
+
 func Load(path string) (Config, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -82,5 +126,48 @@ func Load(path string) (Config, error) {
 	if cfg.ArtifactDir == "" {
 		cfg.ArtifactDir = "artifacts"
 	}
+	applyLiveDefaults(&cfg.Live)
 	return cfg, nil
+}
+
+func applyLiveDefaults(cfg *LiveConfig) {
+	if cfg.Runtime.ArmingState == "" {
+		cfg.Runtime.ArmingState = "safe"
+	}
+	if cfg.Runtime.StateDBPath == "" {
+		cfg.Runtime.StateDBPath = "var/live-state.db"
+	}
+	if cfg.Exchange.Venue == "" {
+		cfg.Exchange.Venue = "bitget"
+	}
+	if cfg.Exchange.ProductType == "" {
+		cfg.Exchange.ProductType = "USDT-FUTURES"
+	}
+	if cfg.Exchange.RESTBaseURL == "" {
+		cfg.Exchange.RESTBaseURL = "https://api.bitget.com"
+	}
+	if cfg.Exchange.PublicWSURL == "" {
+		cfg.Exchange.PublicWSURL = "wss://ws.bitget.com/v2/ws/public"
+	}
+	if cfg.Exchange.PrivateWSURL == "" {
+		cfg.Exchange.PrivateWSURL = "wss://ws.bitget.com/v2/ws/private"
+	}
+	if cfg.Exchange.APIKeyEnv == "" {
+		cfg.Exchange.APIKeyEnv = "BITGET_API_KEY"
+	}
+	if cfg.Exchange.APISecretEnv == "" {
+		cfg.Exchange.APISecretEnv = "BITGET_API_SECRET"
+	}
+	if cfg.Exchange.PassphraseEnv == "" {
+		cfg.Exchange.PassphraseEnv = "BITGET_PASSPHRASE"
+	}
+	if cfg.Exchange.MarginMode == "" {
+		cfg.Exchange.MarginMode = "isolated"
+	}
+	if cfg.Exchange.PositionMode == "" {
+		cfg.Exchange.PositionMode = "one_way_mode"
+	}
+	if cfg.Risk.MaxLeverage == 0 {
+		cfg.Risk.MaxLeverage = 3
+	}
 }

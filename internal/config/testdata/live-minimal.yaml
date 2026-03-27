@@ -1,0 +1,5 @@
+live:
+  enabled: true
+  exchange:
+    symbols:
+      - symbol: BTCUSDT
