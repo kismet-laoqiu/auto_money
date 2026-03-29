@@ -2,7 +2,6 @@ package trader
 
 import (
 	"quantlab/internal/core"
-	"quantlab/internal/exchange/bitget"
 	"quantlab/internal/market"
 )
 
@@ -12,20 +11,14 @@ type Strategy interface {
 	OnBar(symbol, interval string, bars []core.Bar) core.Signal
 }
 
-type Exchange interface {
-	PlaceOrder(req bitget.PlaceOrderRequest) error
-}
-
 type Config struct {
 	ArmingState ArmingState
 	Strategy    Strategy
-	Exchange    Exchange
 }
 
 type Engine struct {
 	state    EngineState
 	strategy Strategy
-	exchange Exchange
 	bars     map[string][]core.Bar
 }
 
@@ -37,7 +30,6 @@ func NewEngine(cfg Config) *Engine {
 	return &Engine{
 		state:    state,
 		strategy: cfg.Strategy,
-		exchange: cfg.Exchange,
 		bars:     map[string][]core.Bar{},
 	}
 }
@@ -54,7 +46,14 @@ func (engine *Engine) Advance(evt market.MarketEvent) ([]Command, error) {
 }
 
 func (engine *Engine) State() EngineState {
-	return engine.state
+	return cloneEngineState(engine.state)
+}
+
+func (engine *Engine) Restore(state EngineState) {
+	engine.state = cloneEngineState(state)
+	if engine.state.ArmingState == "" {
+		engine.state.ArmingState = ArmingSafe
+	}
 }
 
 func (engine *Engine) advanceBar(symbol, interval string, bar core.Bar) ([]Command, error) {
@@ -71,14 +70,16 @@ func (engine *Engine) advanceBar(symbol, interval string, bar core.Bar) ([]Comma
 	if signal.Side == core.Flat {
 		return nil, nil
 	}
-	commands := []Command{Candidate{Symbol: symbol, Interval: interval, Ts: bar.Time, Side: signal.Side, Score: signal.Score, Entry: signal.Entry, Stop: signal.Stop, Target: signal.Target, Reasons: append([]string(nil), signal.Reasons...)}}
-	if engine.exchange == nil || engine.state.ArmingState != ArmingArmed {
-		return commands, nil
+	return []Command{Candidate{Symbol: symbol, Interval: interval, Ts: bar.Time, Side: signal.Side, Score: signal.Score, Entry: signal.Entry, Stop: signal.Stop, Target: signal.Target, Reasons: append([]string(nil), signal.Reasons...)}}, nil
+}
+
+func cloneEngineState(state EngineState) EngineState {
+	cloned := EngineState{
+		ArmingState: state.ArmingState,
+		Symbols:     map[string]SymbolState{},
 	}
-	side := "buy"
-	if signal.Side == core.Short {
-		side = "sell"
+	for symbol, snapshot := range state.Symbols {
+		cloned.Symbols[symbol] = snapshot
 	}
-	err := engine.exchange.PlaceOrder(bitget.PlaceOrderRequest{Symbol: symbol, ProductType: "USDT-FUTURES", MarginMode: "isolated", MarginCoin: "USDT", Side: side, OrderType: "market", Size: "1"})
-	return commands, err
+	return cloned
 }

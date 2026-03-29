@@ -17,6 +17,17 @@ func TestBuildCandidatePromptCarriesNoExecutionAuthority(t *testing.T) {
 	}
 }
 
+func TestBuildRiskPromptCarriesNoExecutionAuthority(t *testing.T) {
+	pkt := RiskPacket{Symbol: "BTCUSDT", From: "armed", To: "degraded", Reason: "position_mismatch"}
+	prompt := BuildRiskPrompt(pkt)
+	if !strings.Contains(strings.ToLower(prompt), "advisory only") {
+		t.Fatalf("prompt must state advisory-only constraint: %q", prompt)
+	}
+	if strings.Contains(strings.ToLower(prompt), "cancel every order") {
+		t.Fatalf("prompt must not delegate execution authority: %q", prompt)
+	}
+}
+
 func TestServiceReviewCandidateUsesStoredForegroundResponse(t *testing.T) {
 	client := &fakeResponsesClient{createResponse: CreateResponse{ID: "resp-review", Status: "completed"}}
 	service := NewService(client, Config{Model: "gpt-5.4", Store: true})
@@ -39,6 +50,29 @@ func TestServiceReviewCandidateUsesStoredForegroundResponse(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(client.lastCreate.Input), "advisory only") {
 		t.Fatalf("review request must carry advisory prompt: %+v", client.lastCreate)
+	}
+}
+
+func TestServiceExplainRiskUsesStoredForegroundResponse(t *testing.T) {
+	client := &fakeResponsesClient{createResponse: CreateResponse{ID: "resp-risk", Status: "completed"}}
+	service := NewService(client, Config{Model: "gpt-5.4", Store: true})
+	resp, err := service.ExplainRisk(context.Background(), RiskPacket{
+		Symbol: "BTCUSDT",
+		From:   "armed",
+		To:     "degraded",
+		Reason: "position_mismatch",
+	})
+	if err != nil {
+		t.Fatalf("explain risk: %v", err)
+	}
+	if resp.ID != "resp-risk" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if client.createCalls != 1 || client.backgroundCalls != 0 {
+		t.Fatalf("unexpected client usage: %+v", client)
+	}
+	if !client.lastCreate.Store || client.lastCreate.Background {
+		t.Fatalf("risk request must be stored foreground: %+v", client.lastCreate)
 	}
 }
 

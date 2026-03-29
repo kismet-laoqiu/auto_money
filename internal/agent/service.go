@@ -30,6 +30,14 @@ func (service *Service) ReviewCandidate(ctx context.Context, pkt CandidatePacket
 	})
 }
 
+func (service *Service) ExplainRisk(ctx context.Context, pkt RiskPacket) (CreateResponse, error) {
+	return service.client.Create(ctx, CreateRequest{
+		Model: service.cfg.Model,
+		Input: BuildRiskPrompt(pkt),
+		Store: service.cfg.Store,
+	})
+}
+
 func (service *Service) StartBackgroundJob(ctx context.Context, job JobRequest) (CreateResponse, error) {
 	return service.client.CreateBackground(ctx, CreateRequest{
 		Model:      service.cfg.Model,

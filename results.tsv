@@ -29,3 +29,6 @@ experiment	commit	metric	status	description
 27	51022bd	0.125139589739	discard	replay batch3 pivot window 2
 28	9d2069f	-0.230162554591	discard	replay batch3 pivot window 4
 29	27f74fa	0.051969731947	discard	replay batch3 pivot window 5
+0	3be7079-dirty	2	baseline	current state: go test ./... and go build pass; RealBitget tests absent, mstr e2e script/config absent
+1	3be7079-dirty	3	keep	task1 mstr config baseline + preflight script + config smoke
+2	3be7079-dirty	4	keep	task3 public market runtime + real public verification + sqlite evidence

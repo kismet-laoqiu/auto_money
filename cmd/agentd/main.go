@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"quantlab/internal/agent"
 	"quantlab/internal/config"
+	sqlitepkg "quantlab/internal/store/sqlite"
+	"quantlab/internal/trader"
 )
 
 func main() {
@@ -41,7 +44,8 @@ func newService(cfg config.Config) (*agent.Service, error) {
 		return nil, fmt.Errorf("agentd requires live.agent.advisory_only=true")
 	}
 	apiKey := os.Getenv("OPENAI_API_KEY")
-	client := agent.NewHTTPResponsesClient(agent.HTTPClientConfig{APIKey: apiKey})
+	baseURL := os.Getenv("OPENAI_BASE_URL")
+	client := agent.NewHTTPResponsesClient(agent.HTTPClientConfig{APIKey: apiKey, BaseURL: baseURL})
 	return agent.NewService(client, agent.Config{Store: true}), nil
 }
 
@@ -50,9 +54,52 @@ func run(ctx context.Context, cfg config.Config) error {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	if _, err := newService(cfg); err != nil {
+	service, err := newService(cfg)
+	if err != nil {
 		return err
 	}
-	<-ctx.Done()
-	return ctx.Err()
+	store, err := sqlitepkg.NewStore(cfg.Live.Runtime.StateDBPath)
+	if err != nil {
+		return err
+	}
+	runtime := agent.NewRuntime(agent.RuntimeConfig{
+		Store:       runtimeStoreAdapter{store: store},
+		Service:     service,
+		MaxLeverage: cfg.Live.Risk.MaxLeverage,
+		ArtifactDir: filepath.Join(cfg.ArtifactDir, "agentd"),
+	})
+	return runtime.Run(ctx)
+}
+
+type runtimeStoreAdapter struct {
+	store *sqlitepkg.Store
+}
+
+func (adapter runtimeStoreAdapter) ListEventsAfter(ctx context.Context, afterSeq int64, limit int, sources ...string) ([]trader.EventEnvelope, error) {
+	envelopes, err := adapter.store.ListEventsAfter(ctx, afterSeq, limit, sources...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]trader.EventEnvelope, 0, len(envelopes))
+	for _, env := range envelopes {
+		out = append(out, trader.EventEnvelope{
+			Seq:        env.Seq,
+			Source:     env.Source,
+			EventID:    env.EventID,
+			Symbol:     env.Symbol,
+			Kind:       env.Kind,
+			ExchangeTS: env.ExchangeTS,
+			ReceivedTS: env.ReceivedTS,
+			Payload:    append([]byte(nil), env.Payload...),
+		})
+	}
+	return out, nil
+}
+
+func (adapter runtimeStoreAdapter) SaveConsumerCursor(ctx context.Context, consumer string, seq int64) error {
+	return adapter.store.SaveConsumerCursor(ctx, consumer, seq)
+}
+
+func (adapter runtimeStoreAdapter) LoadConsumerCursor(ctx context.Context, consumer string) (int64, error) {
+	return adapter.store.LoadConsumerCursor(ctx, consumer)
 }

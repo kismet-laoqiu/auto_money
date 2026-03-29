@@ -104,6 +104,15 @@ func (client *Client) fetchBitget(ctx context.Context, spec config.DatasetConfig
 		limit = 1000
 	}
 	endpoint := fmt.Sprintf("https://api.bitget.com/api/v2/spot/market/candles?symbol=%s&granularity=%s&limit=%d", url.QueryEscape(strings.ToUpper(spec.Symbol)), url.QueryEscape(bitgetGranularity(spec.Interval)), limit)
+	if spec.ProductType != "" {
+		endpoint = fmt.Sprintf(
+			"https://api.bitget.com/api/v2/mix/market/candles?symbol=%s&productType=%s&granularity=%s&limit=%d",
+			url.QueryEscape(strings.ToUpper(spec.Symbol)),
+			url.QueryEscape(spec.ProductType),
+			url.QueryEscape(bitgetGranularity(spec.Interval)),
+			limit,
+		)
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err

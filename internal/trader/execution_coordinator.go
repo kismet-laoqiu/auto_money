@@ -6,8 +6,18 @@ import (
 	"strconv"
 	"strings"
 
+	"quantlab/internal/core"
 	"quantlab/internal/exchange/bitget"
 )
+
+const (
+	defaultEntryQtyValue = 0.01
+	defaultEntryQtyText  = "0.01"
+)
+
+type LiveExchange interface {
+	PlaceOrder(req bitget.PlaceOrderRequest) error
+}
 
 type SymbolPosition struct {
 	Symbol      string
@@ -20,6 +30,24 @@ type SymbolPosition struct {
 func BuildClientOID(runID, symbol string, tranche int, tsMillis int64) string {
 	short := strings.ToLower(strings.TrimSuffix(symbol, "USDT"))
 	return fmt.Sprintf("ql-%s-%s-%d-%d", runID, short, tranche, tsMillis)
+}
+
+func BuildEntryRequest(runID string, candidate Candidate) bitget.PlaceOrderRequest {
+	side := "buy"
+	if candidate.Side == core.Short {
+		side = "sell"
+	}
+	return bitget.PlaceOrderRequest{
+		Symbol:      candidate.Symbol,
+		ProductType: "USDT-FUTURES",
+		MarginMode:  "isolated",
+		MarginCoin:  "USDT",
+		Side:        side,
+		TradeSide:   "open",
+		OrderType:   "market",
+		Size:        defaultEntryQtyText,
+		ClientOID:   BuildClientOID(defaultString(runID, "runtime"), candidate.Symbol, 1, candidate.Ts.UnixMilli()),
+	}
 }
 
 func BuildExitRequest(position SymbolPosition) bitget.PlaceOrderRequest {

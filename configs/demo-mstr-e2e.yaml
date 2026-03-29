@@ -1,5 +1,5 @@
 cache_dir: data
-artifact_dir: artifacts/demo-bitget-btc-legacy
+artifact_dir: artifacts/mstr-e2e
 strategy:
   fast_sma: 15
   slow_sma: 60
@@ -16,9 +16,9 @@ strategy:
   slippage_bps: 3
   atr_window: 14
 datasets:
-  - name: btcusdt_demo_legacy_replay
+  - name: mstrusdt_demo_replay
     provider: bitget
-    symbol: BTCUSDT
+    symbol: MSTRUSDT
     interval: 1m
     limit: 720
     product_type: USDT-FUTURES
@@ -26,7 +26,7 @@ live:
   enabled: true
   runtime:
     arming_state: safe
-    state_db_path: var/demo-bitget-btc-legacy-state.db
+    state_db_path: var/mstr-e2e-state.db
     observe_only: true
   exchange:
     venue: bitget
@@ -34,15 +34,15 @@ live:
     rest_base_url: https://api.bitget.com
     public_ws_url: wss://ws.bitget.com/v2/ws/public
     private_ws_url: wss://ws.bitget.com/v2/ws/private
-    api_key_env: BITGET_DEMO_API_KEY
-    api_secret_env: BITGET_DEMO_API_SECRET
-    passphrase_env: BITGET_DEMO_PASSPHRASE
+    api_key_env: BITGET_API_KEY
+    api_secret_env: BITGET_API_SECRET
+    passphrase_env: BITGET_PASSPHRASE
     margin_mode: isolated
     position_mode: one_way_mode
     symbols:
-      - symbol: BTCUSDT
-        max_notional: 500
-        max_tranches: 4
+      - symbol: MSTRUSDT
+        max_notional: 30
+        max_tranches: 1
   risk:
     max_leverage: 3
   agent:

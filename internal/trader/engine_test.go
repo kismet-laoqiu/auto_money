@@ -6,7 +6,6 @@ import (
 
 	"quantlab/internal/config"
 	"quantlab/internal/core"
-	"quantlab/internal/exchange/bitget"
 	"quantlab/internal/market"
 )
 
@@ -59,35 +58,6 @@ func TestLegacyRuleProfileDelegatesToSignalFn(t *testing.T) {
 	}
 }
 
-func TestTraderSafeModeDoesNotPlaceOrders(t *testing.T) {
-	strategy := &stubStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 62000, Stop: 61000, Target: 64000}}
-	exchange := &fakeExchange{}
-	engine := NewEngine(Config{ArmingState: ArmingSafe, Strategy: strategy, Exchange: exchange})
-	_, err := engine.Advance(market.BarClosedEvent{SymbolValue: "BTCUSDT", Interval: "1m", Ts: time.Unix(1710000000, 0), Close: 62000})
-	if err != nil {
-		t.Fatalf("advance: %v", err)
-	}
-	if exchange.PlaceCalls != 0 {
-		t.Fatalf("safe mode must not place orders")
-	}
-}
-
-func TestTraderArmedModePlacesOrders(t *testing.T) {
-	strategy := &stubStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 62000, Stop: 61000, Target: 64000}}
-	exchange := &fakeExchange{}
-	engine := NewEngine(Config{ArmingState: ArmingArmed, Strategy: strategy, Exchange: exchange})
-	_, err := engine.Advance(market.BarClosedEvent{SymbolValue: "BTCUSDT", Interval: "1m", Ts: time.Unix(1710000000, 0), Close: 62000})
-	if err != nil {
-		t.Fatalf("advance: %v", err)
-	}
-	if exchange.PlaceCalls != 1 {
-		t.Fatalf("expected one place call, got %d", exchange.PlaceCalls)
-	}
-	if exchange.LastReq.Symbol != "BTCUSDT" || exchange.LastReq.Side != "buy" {
-		t.Fatalf("unexpected order request: %+v", exchange.LastReq)
-	}
-}
-
 func TestEngineTurnsMicroBarIntoCandidate(t *testing.T) {
 	strategy := &stubStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 62000, Stop: 61000, Target: 64000}}
 	engine := NewEngine(Config{ArmingState: ArmingSafe, Strategy: strategy})
@@ -128,15 +98,4 @@ func (strategy *stubStrategy) OnBar(symbol, interval string, bars []core.Bar) co
 	strategy.calls++
 	strategy.bars = append([]core.Bar(nil), bars...)
 	return strategy.signal
-}
-
-type fakeExchange struct {
-	PlaceCalls int
-	LastReq    bitget.PlaceOrderRequest
-}
-
-func (exchange *fakeExchange) PlaceOrder(req bitget.PlaceOrderRequest) error {
-	exchange.PlaceCalls++
-	exchange.LastReq = req
-	return nil
 }
