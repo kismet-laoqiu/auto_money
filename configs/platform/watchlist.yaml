@@ -2,55 +2,55 @@ provider: bitget
 product_type: USDT-FUTURES
 stream_interval: 1m
 historical_intervals:
-  - 15m
-  - 1h
-  - 4h
-  - 1d
-  - 1w
+    - 15m
+    - 1h
+    - 4h
+    - 1d
+    - 1w
 horizon_days: 1095
 symbols:
-  - symbol: BTCUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: ETHUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: SOLUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: MSTRUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: CRCLUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: HOODUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: BABAUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: TAOUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: EWYUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: AAPLUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: LINKUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: SEIUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: WLDUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: CLUSDT
-    max_notional: 500
-    max_tranches: 4
-  - symbol: DOGEUSDT
-    max_notional: 500
-    max_tranches: 4
+    - symbol: BTCUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: ETHUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: SOLUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: MSTRUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: CRCLUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: HOODUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: BABAUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: TAOUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: EWYUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: AAPLUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: LINKUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: SEIUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: WLDUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: CLUSDT
+      max_notional: 500
+      max_tranches: 4
+    - symbol: DOGEUSDT
+      max_notional: 500
+      max_tranches: 4

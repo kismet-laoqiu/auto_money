@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"quantlab/internal/config"
+	"quantlab/internal/platform/insights"
 	"quantlab/internal/platform/notifier"
 	sqlitepkg "quantlab/internal/store/sqlite"
+	"quantlab/internal/warehouse/catalog"
 )
 
 func main() {
@@ -52,10 +54,18 @@ func main() {
 		Service:      service,
 		PollInterval: time.Second,
 	})
+	insightsRuntime, closeWarehouse, err := newInsightsRuntime(cfg, *configPath, store)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if closeWarehouse != nil {
+		defer closeWarehouse()
+	}
 	commandRuntime := notifier.NewCommandRuntime(notifier.CommandRuntimeConfig{
 		StateStore:      store,
 		Service:         service,
-		PlatformBaseURL: firstNonEmpty(os.Getenv("PLATFORM_ADDR"), "http://127.0.0.1:18080"),
+		PlatformBaseURL: firstNonEmpty(os.Getenv("PLATFORM_ADDR"), "http://127.0.0.1:8080"),
 		AllowedChatID:   os.Getenv("TELEGRAM_COMMAND_CHAT_ID"),
 		AllowedUserIDs:  parseEnvList(os.Getenv("TELEGRAM_ADMIN_USER_IDS")),
 		ConfigDir:       filepath.Clean(filepath.Dir(*configPath)),
@@ -63,6 +73,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if *once {
+		if insightsRuntime != nil {
+			if err := insightsRuntime.ProcessAvailable(ctx); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+		}
 		if err := runtime.ProcessAvailable(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -73,7 +89,7 @@ func main() {
 		}
 		return
 	}
-	errCh := make(chan error, 3)
+	errCh := make(chan error, 4)
 	if *healthAddr != "" {
 		server := &http.Server{Addr: *healthAddr, Handler: newHealthHandler(runtime, commandRuntime)}
 		go func() {
@@ -93,6 +109,15 @@ func main() {
 		}
 		errCh <- err
 	}()
+	if insightsRuntime != nil {
+		go func() {
+			err := insightsRuntime.Run(ctx)
+			if err == context.Canceled {
+				err = nil
+			}
+			errCh <- err
+		}()
+	}
 	if commandRuntime.Enabled() {
 		go func() {
 			err := commandRuntime.Run(ctx)
@@ -156,4 +181,42 @@ func parseEnvList(raw string) []string {
 		}
 	}
 	return values
+}
+
+func newInsightsRuntime(cfg config.Config, configPath string, store *sqlitepkg.Store) (*insights.Runtime, func() error, error) {
+	if !cfg.Insights.Enabled || cfg.WatchlistPath == "" || cfg.WarehouseConfigPath == "" || store == nil {
+		return nil, nil, nil
+	}
+	watchlistPath := resolveConfigPath(configPath, cfg.WatchlistPath)
+	warehouseConfigPath := resolveConfigPath(configPath, cfg.WarehouseConfigPath)
+	warehouseCfg, err := catalog.LoadConfig(warehouseConfigPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	db, err := catalog.Open(warehouseCfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	closeFn := func() error { return db.Close() }
+	service := insights.NewService(insights.Config{
+		WatchlistPath: watchlistPath,
+		Provider:      cfg.Live.Exchange.Venue,
+		ProductType:   cfg.Live.Exchange.ProductType,
+		Strategy:      cfg.Strategy,
+		Insights:      cfg.Insights,
+		Store:         insights.NewSQLStore(db),
+	})
+	return insights.NewRuntime(insights.RuntimeConfig{
+		Service:      service,
+		Store:        store,
+		Source:       "platform",
+		PollInterval: cfg.Insights.ScanInterval,
+	}), closeFn, nil
+}
+
+func resolveConfigPath(configPath, target string) string {
+	if target == "" || filepath.IsAbs(target) {
+		return target
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(configPath), target))
 }

@@ -1,0 +1,115 @@
+package insights
+
+import (
+	"time"
+
+	"quantlab/internal/core"
+)
+
+type AlertType string
+
+const (
+	AlertTypeDailySignal AlertType = "daily_signal"
+	AlertTypeMarketAlert AlertType = "market_alert"
+)
+
+type MarketAlertSignal string
+
+const (
+	MarketAlertVolumeSpike MarketAlertSignal = "volume_spike"
+	MarketAlertSurge       MarketAlertSignal = "surge"
+	MarketAlertDump        MarketAlertSignal = "dump"
+	MarketAlertCombo       MarketAlertSignal = "combo"
+)
+
+type Event struct {
+	EventIDValue string            `json:"event_id"`
+	SymbolValue  string            `json:"symbol"`
+	Ts           time.Time         `json:"ts"`
+	AlertType    AlertType         `json:"alert_type"`
+	Interval     string            `json:"interval"`
+	Title        string            `json:"title"`
+	Summary      string            `json:"summary"`
+	Details      []string          `json:"details"`
+	Direction    string            `json:"direction,omitempty"`
+	Score        float64           `json:"score,omitempty"`
+	Threshold    float64           `json:"threshold,omitempty"`
+	Signal       MarketAlertSignal `json:"signal,omitempty"`
+}
+
+func (event Event) EventID() string      { return event.EventIDValue }
+func (event Event) Symbol() string       { return event.SymbolValue }
+func (event Event) EventTime() time.Time { return event.Ts }
+func (event Event) Kind() string         { return "insight.alert" }
+
+type DashboardReport struct {
+	GeneratedAt time.Time        `json:"generated_at"`
+	Watchlist   string           `json:"watchlist"`
+	Symbols     []SymbolSnapshot `json:"symbols"`
+	Alerts      []Event          `json:"alerts"`
+}
+
+type SymbolSnapshot struct {
+	Symbol             string            `json:"symbol"`
+	LatestPrice        float64           `json:"latest_price"`
+	Latest15mCloseAt   time.Time         `json:"latest_15m_close_at"`
+	Latest1dCloseAt    time.Time         `json:"latest_1d_close_at"`
+	DailySignal        *SignalSnapshot   `json:"daily_signal,omitempty"`
+	DailyFeatures      FeatureSnapshot   `json:"daily_features"`
+	LatestMarketAlert  *AnomalySnapshot  `json:"latest_market_alert,omitempty"`
+}
+
+type SignalSnapshot struct {
+	Side      string    `json:"side"`
+	Score     float64   `json:"score"`
+	Threshold float64   `json:"threshold"`
+	BarTime   time.Time `json:"bar_time"`
+	Reasons   []string  `json:"reasons"`
+}
+
+type FeatureSnapshot struct {
+	RSI14                   float64 `json:"rsi14"`
+	NeedleDropPct           float64 `json:"needle_drop_pct"`
+	ReclaimPct              float64 `json:"reclaim_pct"`
+	VolumeZScore            float64 `json:"volume_zscore"`
+	RelativeVolumeRatio     float64 `json:"relative_volume_ratio"`
+	BreakoutVolumeConfirmed bool    `json:"breakout_volume_confirmed"`
+	TrendUp                 bool    `json:"trend_up"`
+	TrendDown               bool    `json:"trend_down"`
+	Range                   bool    `json:"range"`
+	HighVol                 bool    `json:"high_vol"`
+}
+
+type AnomalySnapshot struct {
+	Signal         MarketAlertSignal `json:"signal"`
+	MovePct        float64           `json:"move_pct"`
+	MoveThreshold  float64           `json:"move_threshold"`
+	Volume         float64           `json:"volume"`
+	VolumeBaseline float64           `json:"volume_baseline"`
+	VolumeRatio    float64           `json:"volume_ratio"`
+	VolumeZScore   float64           `json:"volume_zscore"`
+	BarTime        time.Time         `json:"bar_time"`
+}
+
+type AnomalyThresholds struct {
+	MovePct float64
+	Volume  float64
+}
+
+type DailyAnalysis struct {
+	Signal    core.Signal
+	Threshold float64
+	Features  core.FeatureSet
+	Qualified bool
+}
+
+type AnomalyAnalysis struct {
+	Signal       MarketAlertSignal
+	MovePct      float64
+	MoveLimit    float64
+	Volume       float64
+	VolumeLimit  float64
+	VolumeRatio  float64
+	VolumeZScore float64
+	Qualified    bool
+}

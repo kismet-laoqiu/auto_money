@@ -6,7 +6,7 @@
 - binary: `/home/admin/.local/share/pnpm/openclaw`
 - gateway: `0.0.0.0:17291`
 - workspace: `/home/admin/.openclaw/workspace`
-- platform API for OpenClaw smoke: `http://127.0.0.1:18080`
+- platform API for OpenClaw smoke: `http://127.0.0.1:8080`
 - Telegram target: `6959476905`
 
 ## Configure Telegram Channel
@@ -33,21 +33,23 @@ sudo -u admin \
   /home/admin/.local/share/pnpm/openclaw channels list
 ```
 
-## Start platformd for OpenClaw smoke
-
-`127.0.0.1:8080` is occupied by SearXNG on this ECS. For OpenClaw validation, run `platformd` on `127.0.0.1:18080`.
+## Validate platformd for OpenClaw smoke
 
 ```bash
 cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
 PATH=/usr/local/go/bin:/usr/bin:/bin go build -o ./bin/platformd ./cmd/platformd
-./bin/platformd -config configs/live.yaml -listen 127.0.0.1:18080
+sudo cp deploy/systemd/quantlab-platformd.service /etc/systemd/system/quantlab-platformd.service
+sudo systemctl daemon-reload
+sudo systemctl restart quantlab-platformd
+curl -fsS http://127.0.0.1:8080/
 ```
 
 Smoke:
 
 ```bash
-curl -fsS http://127.0.0.1:18080/health
-curl -fsS http://127.0.0.1:18080/api/status
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:8080/api/status
+curl -fsS http://127.0.0.1:8080/api/dashboard
 ```
 
 ## Sync Quant Platform Skill

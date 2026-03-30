@@ -15,11 +15,15 @@ import (
 	"quantlab/internal/config"
 	"quantlab/internal/exchange/bitget"
 	"quantlab/internal/platform/api"
+	"quantlab/internal/platform/dashboard"
+	"quantlab/internal/platform/insights"
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	watchlistsvc "quantlab/internal/platform/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
+	"quantlab/internal/warehouse/catalog"
 )
 
 func main() {
@@ -41,6 +45,7 @@ func main() {
 	if *stateDBPath == "" {
 		*stateDBPath = cfg.Live.Runtime.StateDBPath
 	}
+	resolvedConfigPath := resolveConfigPath(*configPath)
 
 	store, err := sqlitepkg.NewStore(*stateDBPath)
 	if err != nil {
@@ -72,6 +77,14 @@ func main() {
 		}
 	}
 	registry := strategybundle.NewRegistry(filepath.Clean(filepath.Join(filepath.Dir(*configPath), "..", "strategies")))
+	dashboardService, watchlistService, closeWarehouse, err := newDashboardServices(cfg, resolvedConfigPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if closeWarehouse != nil {
+		defer closeWarehouse()
+	}
 	server := &http.Server{
 		Addr: *listenAddr,
 		Handler: api.NewHandler(api.HandlerConfig{
@@ -81,6 +94,8 @@ func main() {
 			Strategies: registry,
 			Query:      queries,
 			Live:       liveOps,
+			Dashboard:  dashboardService,
+			Watchlist:  watchlistService,
 		}),
 	}
 
@@ -94,6 +109,51 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func newDashboardServices(cfg config.Config, configPath string) (*dashboard.Service, *watchlistsvc.Service, func() error, error) {
+	if !cfg.Insights.Enabled || cfg.WarehouseConfigPath == "" || cfg.WatchlistPath == "" {
+		return nil, nil, nil, nil
+	}
+	warehouseCfg, err := catalog.LoadConfig(cfg.WarehouseConfigPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	db, err := catalog.Open(warehouseCfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	closeFn := func() error { return db.Close() }
+	insightService := insights.NewService(insights.Config{
+		WatchlistPath: cfg.WatchlistPath,
+		Provider:      cfg.Live.Exchange.Venue,
+		ProductType:   cfg.Live.Exchange.ProductType,
+		Strategy:      cfg.Strategy,
+		Insights:      cfg.Insights,
+		Store:         insights.NewSQLStore(db),
+		PriceReader:   bitget.NewClient(cfg.Live.Exchange.RESTBaseURL),
+	})
+	return dashboard.NewService(dashboard.Config{Insights: insightService}),
+		watchlistsvc.NewService(watchlistsvc.Config{
+			WatchlistPath:       cfg.WatchlistPath,
+			LiveConfigPath:      configPath,
+			WarehouseConfigPath: cfg.WarehouseConfigPath,
+			PlatformctlPath:     cfg.Insights.Dashboard.PlatformctlPath,
+			MarketdRestartUnit:  cfg.Insights.Dashboard.MarketdRestartUnit,
+		}),
+		closeFn,
+		nil
+}
+
+func resolveConfigPath(path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	return filepath.Clean(absolute)
 }
 
 func allowedSymbols(symbols []config.LiveSymbolConfig) []string {

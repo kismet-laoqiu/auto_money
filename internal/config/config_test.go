@@ -57,6 +57,18 @@ func TestLoadLiveConfig(t *testing.T) {
 	if !cfg.Live.Agent.AdvisoryOnly {
 		t.Fatalf("agent must remain advisory-only")
 	}
+	if !cfg.Insights.Enabled {
+		t.Fatalf("insights must be enabled in live config")
+	}
+	if cfg.Insights.DailySignal.Interval != "1d" {
+		t.Fatalf("unexpected daily signal interval: %s", cfg.Insights.DailySignal.Interval)
+	}
+	if cfg.Insights.Anomaly.Interval != "15m" {
+		t.Fatalf("unexpected anomaly interval: %s", cfg.Insights.Anomaly.Interval)
+	}
+	if cfg.Insights.Dashboard.MarketdRestartUnit != "quantlab-marketd.service" {
+		t.Fatalf("unexpected marketd restart unit: %s", cfg.Insights.Dashboard.MarketdRestartUnit)
+	}
 }
 
 func TestLoadConfigIncludesWarehouseConfigPath(t *testing.T) {
@@ -71,5 +83,32 @@ func TestLoadConfigIncludesWarehouseConfigPath(t *testing.T) {
 	}
 	if cfg.WarehouseConfigPath != "configs/platform/warehouse.yaml" {
 		t.Fatalf("unexpected warehouse config path: %s", cfg.WarehouseConfigPath)
+	}
+}
+
+func TestLoadLiveConfigInsightsDefaults(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "live.yaml")
+	if err := os.WriteFile(path, []byte("live:\n  enabled: true\ninsights:\n  enabled: true\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Insights.ScanInterval <= 0 {
+		t.Fatalf("expected scan interval default, got %s", cfg.Insights.ScanInterval)
+	}
+	if cfg.Insights.PriceTTL <= 0 {
+		t.Fatalf("expected price ttl default, got %s", cfg.Insights.PriceTTL)
+	}
+	if cfg.Insights.DailySignal.LookbackBars != 1095 {
+		t.Fatalf("unexpected daily lookback: %d", cfg.Insights.DailySignal.LookbackBars)
+	}
+	if cfg.Insights.Anomaly.LookbackBars != 105120 {
+		t.Fatalf("unexpected anomaly lookback: %d", cfg.Insights.Anomaly.LookbackBars)
+	}
+	if cfg.Insights.Dashboard.PlatformctlPath != "./bin/platformctl" {
+		t.Fatalf("unexpected platformctl path: %s", cfg.Insights.Dashboard.PlatformctlPath)
 	}
 }

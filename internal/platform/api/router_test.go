@@ -11,10 +11,14 @@ import (
 	"time"
 
 	"quantlab/internal/backtest"
+	"quantlab/internal/config"
+	"quantlab/internal/platform/insights"
 	"quantlab/internal/market"
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	watchlistsvc "quantlab/internal/platform/watchlist"
+	basewatchlist "quantlab/internal/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
 	"quantlab/internal/trader"
@@ -383,6 +387,93 @@ func TestRouterLiveFlattenEndpoint(t *testing.T) {
 	}
 }
 
+func TestRouterDashboardPage(t *testing.T) {
+	store := newTestStore(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+
+	NewHandler(HandlerConfig{
+		Store: store,
+		Dashboard: stubDashboardService{
+			html: "<html><body><pre># QuantLab Dashboard</pre></body></html>",
+		},
+		Watchlist: stubWatchlistService{symbolsText: "BTCUSDT\nETHUSDT"},
+	}).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("unexpected content type: %s", got)
+	}
+	if !strings.Contains(recorder.Body.String(), "# QuantLab Dashboard") {
+		t.Fatalf("unexpected body: %s", recorder.Body.String())
+	}
+}
+
+func TestRouterDashboardJSON(t *testing.T) {
+	store := newTestStore(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/dashboard", nil)
+
+	NewHandler(HandlerConfig{
+		Store: store,
+		Dashboard: stubDashboardService{
+			report: insights.DashboardReport{
+				Symbols: []insights.SymbolSnapshot{{Symbol: "BTCUSDT", LatestPrice: 81234.5}},
+			},
+		},
+	}).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"symbol":"BTCUSDT"`) {
+		t.Fatalf("unexpected payload: %s", recorder.Body.String())
+	}
+}
+
+func TestRouterWatchlistSaveHTML(t *testing.T) {
+	store := newTestStore(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/watchlist/save", strings.NewReader("symbols=BTCUSDT%0AETHUSDT"))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	request.Header.Set("Accept", "text/html")
+
+	NewHandler(HandlerConfig{
+		Store:      store,
+		Dashboard:  stubDashboardService{html: "<html><body>watchlist saved</body></html>"},
+		Watchlist:  stubWatchlistService{savedFile: basewatchlist.File{Symbols: []config.LiveSymbolConfig{{Symbol: "BTCUSDT"}, {Symbol: "ETHUSDT"}}}, symbolsText: "BTCUSDT\nETHUSDT"},
+	}).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "watchlist saved") {
+		t.Fatalf("unexpected html body: %s", recorder.Body.String())
+	}
+}
+
+func TestRouterWatchlistApplyJSON(t *testing.T) {
+	store := newTestStore(t)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/watchlist/apply", nil)
+
+	NewHandler(HandlerConfig{
+		Store: store,
+		Watchlist: stubWatchlistService{
+			applyResult: watchlistsvc.ApplyResult{RestartUnit: "quantlab-marketd.service"},
+		},
+	}).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status code: %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"restart_unit":"quantlab-marketd.service"`) {
+		t.Fatalf("unexpected apply payload: %s", recorder.Body.String())
+	}
+}
+
 func newTestStore(t *testing.T) *sqlitepkg.Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "platform-state.db")
@@ -548,4 +639,37 @@ type stubStrategyRegistry struct {
 
 func (registry stubStrategyRegistry) List(_ string) ([]strategybundle.VersionInfo, error) {
 	return registry.versions, registry.err
+}
+
+type stubDashboardService struct {
+	report insights.DashboardReport
+	html   string
+	err    error
+}
+
+func (service stubDashboardService) Report(context.Context) (insights.DashboardReport, error) {
+	return service.report, service.err
+}
+
+func (service stubDashboardService) RenderHTML(context.Context, string, string) (string, error) {
+	return service.html, service.err
+}
+
+type stubWatchlistService struct {
+	symbolsText string
+	savedFile   basewatchlist.File
+	applyResult watchlistsvc.ApplyResult
+	err         error
+}
+
+func (service stubWatchlistService) SymbolsText() (string, error) {
+	return service.symbolsText, service.err
+}
+
+func (service stubWatchlistService) SaveSymbols(string) (basewatchlist.File, error) {
+	return service.savedFile, service.err
+}
+
+func (service stubWatchlistService) Apply(context.Context) (watchlistsvc.ApplyResult, error) {
+	return service.applyResult, service.err
 }

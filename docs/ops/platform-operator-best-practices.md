@@ -7,7 +7,7 @@
 | ECS | `47.250.138.143` |
 | 代码仓库 | `/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan` |
 | 当前分支 | `autoresearch/20260328-all-plan` |
-| 平台 API | `http://127.0.0.1:18080` |
+| 平台 API | `http://127.0.0.1:8080` |
 | 通知 Health | `http://127.0.0.1:18081/health` |
 | MCP bridge | `127.0.0.1:18082` |
 | 运行时 SQLite | `var/mstr-e2e-state.db` |
@@ -50,16 +50,18 @@ systemctl show quantlab-marketd quantlab-traderd quantlab-execd quantlab-platfor
 执行命令：
 
 ```bash
-curl -fsS http://127.0.0.1:18080/health
-curl -fsS http://127.0.0.1:18080/api/status | jq '.'
-./bin/platformctl status -addr http://127.0.0.1:18080
-./bin/platformctl positions -addr http://127.0.0.1:18080
-./bin/platformctl events -addr http://127.0.0.1:18080 --limit 20
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:8080/api/status | jq '.'
+curl -fsS http://127.0.0.1:8080/api/dashboard | jq '.generated_at, (.symbols | length), (.alerts | length)'
+./bin/platformctl status -addr http://127.0.0.1:8080
+./bin/platformctl positions -addr http://127.0.0.1:8080
+./bin/platformctl events -addr http://127.0.0.1:8080 --limit 20
 ```
 
 从这一步可以得知：
 
 - `platformd` 是 operator 的统一 HTTP 控制面，不需要直接翻 SQLite 才能看状态。
+- 浏览器入口 `/` 与 JSON 入口 `/api/dashboard` 现在也是 control-plane 的一部分，watchlist、最新价格、daily features、active alerts 都应先从这里观察。
 - `platformctl` 是 operator CLI，只应通过 `platformd` 暴露出来的控制面动作工作。
 - `marketd -> traderd -> execd -> notifierd` 的职责边界是固定的，任何读写穿透都属于反模式。
 - `execd` 仍是唯一 Bitget 写路径，`platformd` 和 AI 面都不能绕过它直接写交易所。
@@ -164,7 +166,7 @@ git ls-files --others --exclude-standard
 | `execd` | 唯一 Bitget 写路径 | 被 AI 或 OpenClaw 绕过 |
 | `platformd` | operator HTTP API | 直接持有交易所写权限 |
 | `mcpd` | AI tool control plane | 直接拿 exchange creds |
-| `notifierd` | 事件通知与 Telegram inbound command | 抢占 OpenClaw job gateway 语义 |
+| `notifierd` | 事件通知、Telegram inbound command、insights DingTalk alert delivery | 抢占 OpenClaw job gateway 语义 |
 | `OpenClaw` | conversational / delivery gateway | 变成平台 Telegram bot inbound owner |
 
 ## 每日操作顺序

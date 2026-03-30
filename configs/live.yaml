@@ -46,3 +46,27 @@ live:
   agent:
     enabled: false
     advisory_only: true
+insights:
+  enabled: true
+  scan_interval: 1m
+  price_ttl: 30s
+  daily_signal:
+    interval: 1d
+    lookback_bars: 1095
+    min_score: 4.25
+    score_quantile: 0.985
+    cooldown_bars: 5
+  anomaly:
+    interval: 15m
+    lookback_bars: 105120
+    rolling_window: 20
+    min_move_pct: 2.5
+    move_quantile: 0.995
+    min_volume_zscore: 3.5
+    min_volume_ratio: 3.0
+    volume_quantile: 0.995
+    cooldown_bars: 8
+  dashboard:
+    platformctl_path: ./bin/platformctl
+    marketd_restart_unit: quantlab-marketd.service
+    render_symbol_limit: 24

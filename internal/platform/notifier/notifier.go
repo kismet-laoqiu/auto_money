@@ -30,6 +30,8 @@ const (
 	KindPromotionApproved Kind = "promotion_approved"
 	KindCanaryDegraded    Kind = "canary_degraded"
 	KindDailySummary      Kind = "daily_summary"
+	KindDailySignal       Kind = "daily_signal"
+	KindMarketAlert       Kind = "market_alert"
 )
 
 type Config struct {
@@ -95,6 +97,8 @@ func ChannelsForKind(kind Kind) []Channel {
 	switch kind {
 	case KindFill, KindRiskHalt, KindPromotionApproved, KindCanaryDegraded, KindDailySummary:
 		return []Channel{ChannelTelegram, ChannelDingTalk}
+	case KindDailySignal, KindMarketAlert:
+		return []Channel{ChannelDingTalk}
 	default:
 		return nil
 	}

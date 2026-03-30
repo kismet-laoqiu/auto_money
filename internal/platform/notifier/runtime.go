@@ -210,6 +210,8 @@ func decodeNotificationEvent(event sqlitepkg.EventEnvelope) (Notification, bool,
 		return decodeGenericNotification(KindPromotionApproved, event.Payload)
 	case "promotion.canary_degraded":
 		return decodeGenericNotification(KindCanaryDegraded, event.Payload)
+	case "insight.alert":
+		return decodeInsightNotification(event.Payload)
 	default:
 		return Notification{}, false, nil
 	}
@@ -223,6 +225,28 @@ func decodeGenericNotification(kind Kind, payload []byte) (Notification, bool, e
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return Notification{}, false, err
+	}
+	return Notification{
+		Kind:    kind,
+		Title:   body.Title,
+		Summary: body.Summary,
+		Details: append([]string(nil), body.Details...),
+	}, true, nil
+}
+
+func decodeInsightNotification(payload []byte) (Notification, bool, error) {
+	var body struct {
+		AlertType string   `json:"alert_type"`
+		Title     string   `json:"title"`
+		Summary   string   `json:"summary"`
+		Details   []string `json:"details"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return Notification{}, false, err
+	}
+	kind := KindMarketAlert
+	if body.AlertType == "daily_signal" {
+		kind = KindDailySignal
 	}
 	return Notification{
 		Kind:    kind,

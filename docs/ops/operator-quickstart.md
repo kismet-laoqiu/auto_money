@@ -5,11 +5,11 @@
 当前已经真实可用的 operator 面有四条：
 
 1. `platformd`
-   读取现有 SQLite runtime state，并提供 `health / status / positions / orders / events / bars / features / strategies / backtests / promotions / live flatten` HTTP API。
+   读取现有 SQLite runtime state，并提供 `health / status / positions / orders / events / bars / features / strategies / backtests / promotions / live flatten / dashboard / watchlist save / watchlist apply` HTTP API。
 2. `platformctl`
    作为 operator CLI，读取 `platformd` API，并提供 `status`、`strategy versions`、`historical sync`、`aggregate`、`export parquet`、`backtest run`、`promotion *`、`live flatten`、`notify test`、`warehouse health` 能力。
 3. `notifierd`
-   消费 `event_log` 中的 `order_fill`、`risk.state_changed`、`promotion.*` 事件，并通过 Telegram / DingTalk 发通知。
+   消费 `event_log` 中的 `order_fill`、`risk.state_changed`、`promotion.*`、`insight.alert` 事件，并通过 Telegram / DingTalk 发通知。
 4. `execd`
    消费 `trader` source 中的 `entry.intent.created`，独占 Bitget 写路径，并支持 `flatten-symbol` 收尾。
 
@@ -57,27 +57,58 @@ PATH=/usr/local/go/bin:/usr/bin:/bin go build -o ./bin/execd ./cmd/execd
 
 ## Start platformd
 
-默认配置来自 `configs/live.yaml`，其中 state db 是 `var/live-state.db`。当前这台 ECS 的 `127.0.0.1:8080` 被 SearXNG 占用，operator 入口固定使用 `127.0.0.1:18080`。
+默认配置来自 `configs/live.yaml`，其中 state db 是 `var/live-state.db`。当前交付的 operator 入口已经收口到 `127.0.0.1:8080`，systemd 对外监听 `0.0.0.0:8080`。
 
 ```bash
 cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
-./bin/platformd -config configs/live.yaml -execd-path ./bin/execd -listen 127.0.0.1:18080
+./bin/platformd -config configs/live.yaml -execd-path ./bin/execd -listen 0.0.0.0:8080
 ```
 
 Smoke:
 
 ```bash
-curl -fsS http://127.0.0.1:18080/health
-./bin/platformctl status -addr http://127.0.0.1:18080
-./bin/platformctl strategy versions -addr http://127.0.0.1:18080 -strategy mstr-wave-fib
-./bin/platformctl positions -addr http://127.0.0.1:18080
-./bin/platformctl orders -addr http://127.0.0.1:18080 --limit 20
-./bin/platformctl events -addr http://127.0.0.1:18080 --limit 20
-curl -fsS "http://127.0.0.1:18080/api/bars?config_path=configs/live.yaml&dataset=btcusdt_live_replay"
-curl -fsS "http://127.0.0.1:18080/api/features?config_path=configs/live.yaml&dataset=btcusdt_live_replay&offset=0"
-./bin/platformctl backtest run -addr http://127.0.0.1:18080 -config configs/demo-mstr-bundle.yaml
-./bin/platformctl promotion request -addr http://127.0.0.1:18080 -strategy mstr-wave-fib -version v0.1.2 -config configs/demo-mstr-bundle.yaml
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS http://127.0.0.1:8080/
+curl -fsS http://127.0.0.1:8080/api/dashboard | jq '.generated_at, (.symbols | length), (.alerts | length)'
+./bin/platformctl status -addr http://127.0.0.1:8080
+./bin/platformctl strategy versions -addr http://127.0.0.1:8080 -strategy mstr-wave-fib
+./bin/platformctl positions -addr http://127.0.0.1:8080
+./bin/platformctl orders -addr http://127.0.0.1:8080 --limit 20
+./bin/platformctl events -addr http://127.0.0.1:8080 --limit 20
+curl -fsS "http://127.0.0.1:8080/api/bars?config_path=configs/live.yaml&dataset=btcusdt_live_replay"
+curl -fsS "http://127.0.0.1:8080/api/features?config_path=configs/live.yaml&dataset=btcusdt_live_replay&offset=0"
+./bin/platformctl backtest run -addr http://127.0.0.1:8080 -config configs/demo-mstr-bundle.yaml
+./bin/platformctl promotion request -addr http://127.0.0.1:8080 -strategy mstr-wave-fib -version v0.1.2 -config configs/demo-mstr-bundle.yaml
 ```
+
+## Dashboard And Watchlist
+
+浏览器入口：
+
+```bash
+http://47.250.138.143:8080/
+```
+
+当前页面支持三件事：
+
+- 查看 watchlist、最新价格、daily technical features、active alerts
+- 保存 watchlist YAML 对应的 symbol 列表
+- 手动执行 apply，并让 `marketd` 重启接入新 watchlist
+
+直接调用 API 的方式：
+
+```bash
+curl -fsS http://127.0.0.1:8080/api/dashboard | jq '.symbols[0]'
+curl -fsS -X POST http://127.0.0.1:8080/api/watchlist/save \
+  -d $'symbols=BTCUSDT\nETHUSDT\nSOLUSDT'
+curl -fsS -X POST http://127.0.0.1:8080/api/watchlist/apply
+```
+
+语义边界：
+
+- `save` 只改 `configs/platform/watchlist.yaml`
+- `apply` 才会执行三年窗口 backfill / aggregate，并重启 `quantlab-marketd`
+- `platformd` 与 `notifierd` 每轮读取 watchlist 文件，不依赖自身重启感知 symbol 变化
 
 ## Promotion Flow
 
@@ -87,16 +118,16 @@ curl -fsS "http://127.0.0.1:18080/api/features?config_path=configs/live.yaml&dat
 cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
 
 promo_id=$(./bin/platformctl promotion request \
-  -addr http://127.0.0.1:18080 \
+  -addr http://127.0.0.1:8080 \
   -strategy mstr-wave-fib \
   -version v0.1.2 \
   -config configs/demo-mstr-bundle.yaml | jq -r '.id')
 
-./bin/platformctl promotion start-shadow -addr http://127.0.0.1:18080 -id "$promo_id"
-./bin/platformctl promotion pass-shadow -addr http://127.0.0.1:18080 -id "$promo_id"
-./bin/platformctl promotion start-canary -addr http://127.0.0.1:18080 -id "$promo_id"
-./bin/platformctl promotion approve -addr http://127.0.0.1:18080 -id "$promo_id"
-./bin/platformctl promotion get -addr http://127.0.0.1:18080 -id "$promo_id"
+./bin/platformctl promotion start-shadow -addr http://127.0.0.1:8080 -id "$promo_id"
+./bin/platformctl promotion pass-shadow -addr http://127.0.0.1:8080 -id "$promo_id"
+./bin/platformctl promotion start-canary -addr http://127.0.0.1:8080 -id "$promo_id"
+./bin/platformctl promotion approve -addr http://127.0.0.1:8080 -id "$promo_id"
+./bin/platformctl promotion get -addr http://127.0.0.1:8080 -id "$promo_id"
 ```
 
 ## Send Test Notifications
@@ -118,6 +149,17 @@ DINGTALK_WEBHOOK=... \
 DINGTALK_SECRET=... \
 ./bin/platformctl notify test --channel all --message "platformctl all-channel test"
 ```
+
+## Insights Alert Semantics
+
+`configs/live.yaml` 的 `insights` 现在控制两类低噪声告警：
+
+- `daily_signal`
+  只看 `1d` closed bars，要求 `core.EvaluateSignal` 给出方向，且 `score` 同时超过配置下限和三年历史高分位阈值
+- `anomaly`
+  只看 `15m` closed bars，覆盖异常量能、暴涨、暴跌；要求当前 bar 同时超过 rolling baseline 和三年历史高分位阈值
+
+这些告警统一写入 sqlite `event_log` 的 `insight.alert`，再由 `notifierd` 只向 DingTalk 投递。它们不是“盘中每跳都报”，而是“closed bar 级别、历史分位过滤后的低频异动”。
 
 ## Run notifierd
 

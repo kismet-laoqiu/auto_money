@@ -6,11 +6,15 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 
 	"quantlab/internal/backtest"
+	"quantlab/internal/platform/insights"
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	watchlistsvc "quantlab/internal/platform/watchlist"
+	basewatchlist "quantlab/internal/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
 	"quantlab/internal/trader"
@@ -32,6 +36,8 @@ type HandlerConfig struct {
 	Strategies StrategyRegistry
 	Query      QueryService
 	Live       LiveOps
+	Dashboard  DashboardService
+	Watchlist  WatchlistService
 }
 
 type BacktestRunner interface {
@@ -59,6 +65,17 @@ type LiveOps interface {
 	FlattenSymbol(ctx context.Context, symbol string) (live.FlattenResult, error)
 }
 
+type DashboardService interface {
+	Report(ctx context.Context) (insights.DashboardReport, error)
+	RenderHTML(ctx context.Context, symbolsText string, flash string) (string, error)
+}
+
+type WatchlistService interface {
+	SymbolsText() (string, error)
+	SaveSymbols(raw string) (basewatchlist.File, error)
+	Apply(ctx context.Context) (watchlistsvc.ApplyResult, error)
+}
+
 type StrategyRegistry interface {
 	List(strategyID string) ([]strategybundle.VersionInfo, error)
 }
@@ -81,6 +98,9 @@ type StrategyPromotion struct {
 
 func NewHandler(cfg HandlerConfig) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		handleDashboardPage(writer, request, cfg.Dashboard, cfg.Watchlist)
+	})
 	mux.HandleFunc("/health", func(writer http.ResponseWriter, request *http.Request) {
 		writeJSON(writer, http.StatusOK, map[string]bool{"ok": true})
 	})
@@ -134,6 +154,15 @@ func NewHandler(cfg HandlerConfig) http.Handler {
 	})
 	mux.HandleFunc("/api/live/flatten", func(writer http.ResponseWriter, request *http.Request) {
 		handleLiveFlatten(writer, request, cfg.Live)
+	})
+	mux.HandleFunc("/api/dashboard", func(writer http.ResponseWriter, request *http.Request) {
+		handleDashboardJSON(writer, request, cfg.Dashboard)
+	})
+	mux.HandleFunc("/api/watchlist/save", func(writer http.ResponseWriter, request *http.Request) {
+		handleWatchlistSave(writer, request, cfg.Dashboard, cfg.Watchlist)
+	})
+	mux.HandleFunc("/api/watchlist/apply", func(writer http.ResponseWriter, request *http.Request) {
+		handleWatchlistApply(writer, request, cfg.Dashboard, cfg.Watchlist)
 	})
 	return mux
 }
@@ -258,6 +287,145 @@ func handleBars(writer http.ResponseWriter, request *http.Request, service Query
 		return
 	}
 	writeJSON(writer, http.StatusOK, result)
+}
+
+func handleDashboardPage(writer http.ResponseWriter, request *http.Request, dashboard DashboardService, watchlist WatchlistService) {
+	if request.Method != http.MethodGet {
+		writeError(writer, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if dashboard == nil || watchlist == nil {
+		writeError(writer, http.StatusInternalServerError, "dashboard or watchlist service is nil")
+		return
+	}
+	symbolsText, err := watchlist.SymbolsText()
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	body, err := dashboard.RenderHTML(request.Context(), symbolsText, request.URL.Query().Get("flash"))
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = writer.Write([]byte(body))
+}
+
+func handleDashboardJSON(writer http.ResponseWriter, request *http.Request, dashboard DashboardService) {
+	if request.Method != http.MethodGet {
+		writeError(writer, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if dashboard == nil {
+		writeError(writer, http.StatusInternalServerError, "dashboard service is nil")
+		return
+	}
+	report, err := dashboard.Report(request.Context())
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, report)
+}
+
+func handleWatchlistSave(writer http.ResponseWriter, request *http.Request, dashboard DashboardService, watchlist WatchlistService) {
+	if request.Method != http.MethodPost {
+		writeError(writer, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if watchlist == nil {
+		writeError(writer, http.StatusInternalServerError, "watchlist service is nil")
+		return
+	}
+	raw, err := readSymbolsPayload(request)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	file, err := watchlist.SaveSymbols(raw)
+	if err != nil {
+		writeError(writer, http.StatusBadRequest, err.Error())
+		return
+	}
+	if wantsHTML(request) && dashboard != nil {
+		symbolsText, err := watchlist.SymbolsText()
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, err.Error())
+			return
+		}
+		body, err := dashboard.RenderHTML(request.Context(), symbolsText, "watchlist saved")
+		if err != nil {
+			writeError(writer, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = writer.Write([]byte(body))
+		return
+	}
+	writeJSON(writer, http.StatusOK, map[string]any{"symbols": file.SymbolNames()})
+}
+
+func handleWatchlistApply(writer http.ResponseWriter, request *http.Request, dashboard DashboardService, watchlist WatchlistService) {
+	if request.Method != http.MethodPost {
+		writeError(writer, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if watchlist == nil {
+		writeError(writer, http.StatusInternalServerError, "watchlist service is nil")
+		return
+	}
+	result, err := watchlist.Apply(request.Context())
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if wantsHTML(request) && dashboard != nil {
+		symbolsText, symbolErr := watchlist.SymbolsText()
+		if symbolErr != nil {
+			writeError(writer, http.StatusInternalServerError, symbolErr.Error())
+			return
+		}
+		body, renderErr := dashboard.RenderHTML(request.Context(), symbolsText, "watchlist apply completed")
+		if renderErr != nil {
+			writeError(writer, http.StatusInternalServerError, renderErr.Error())
+			return
+		}
+		writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = writer.Write([]byte(body))
+		return
+	}
+	writeJSON(writer, http.StatusOK, result)
+}
+
+func readSymbolsPayload(request *http.Request) (string, error) {
+	if strings.Contains(request.Header.Get("Content-Type"), "application/json") {
+		var body struct {
+			Symbols string `json:"symbols"`
+		}
+		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(body.Symbols) == "" {
+			return "", http.ErrMissingFile
+		}
+		return body.Symbols, nil
+	}
+	if err := request.ParseForm(); err != nil {
+		return "", err
+	}
+	value := request.Form.Get("symbols")
+	if strings.TrimSpace(value) == "" {
+		return "", http.ErrMissingFile
+	}
+	return value, nil
+}
+
+func wantsHTML(request *http.Request) bool {
+	if strings.Contains(request.Header.Get("Accept"), "text/html") {
+		return true
+	}
+	return strings.Contains(request.Header.Get("Content-Type"), "application/x-www-form-urlencoded")
 }
 
 func handleFeatures(writer http.ResponseWriter, request *http.Request, service QueryService) {

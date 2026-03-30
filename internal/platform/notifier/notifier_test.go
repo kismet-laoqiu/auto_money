@@ -152,6 +152,12 @@ func TestChannelsForKindRiskAndSummary(t *testing.T) {
 	if got := ChannelsForKind(KindDailySummary); !slices.Equal(got, []Channel{ChannelTelegram, ChannelDingTalk}) {
 		t.Fatalf("unexpected summary routes: %+v", got)
 	}
+	if got := ChannelsForKind(KindDailySignal); !slices.Equal(got, []Channel{ChannelDingTalk}) {
+		t.Fatalf("unexpected daily signal routes: %+v", got)
+	}
+	if got := ChannelsForKind(KindMarketAlert); !slices.Equal(got, []Channel{ChannelDingTalk}) {
+		t.Fatalf("unexpected market alert routes: %+v", got)
+	}
 }
 
 func TestNotificationRenderUsesChineseHeadingsAndPreservesEnglishTerms(t *testing.T) {

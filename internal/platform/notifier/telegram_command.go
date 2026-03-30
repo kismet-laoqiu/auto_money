@@ -76,7 +76,7 @@ func NewCommandRuntime(cfg CommandRuntimeConfig) *CommandRuntime {
 		cfg.ConsumerKey = "telegram.command"
 	}
 	if cfg.PlatformBaseURL == "" {
-		cfg.PlatformBaseURL = "http://127.0.0.1:18080"
+		cfg.PlatformBaseURL = "http://127.0.0.1:8080"
 	}
 	if cfg.ConfigDir == "" {
 		cfg.ConfigDir = "configs"

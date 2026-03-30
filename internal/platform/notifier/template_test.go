@@ -38,6 +38,26 @@ func TestNotificationRenderSnapshots(t *testing.T) {
 			},
 			want: "每日总结\n每日 summary\nMSTRUSDT fill avgPrice=126.33\nstrategy=mstr-wave-fib\nstatus=live",
 		},
+		{
+			name: "daily signal",
+			notification: Notification{
+				Kind:    KindDailySignal,
+				Title:   "BTCUSDT 日线买点",
+				Summary: "score=4.82 threshold=4.60 close=81234.1",
+				Details: []string{"reasons=trend up, break retest"},
+			},
+			want: "日线信号\nBTCUSDT 日线买点\nscore=4.82 threshold=4.60 close=81234.1\nreasons=trend up, break retest",
+		},
+		{
+			name: "market alert",
+			notification: Notification{
+				Kind:    KindMarketAlert,
+				Title:   "BTCUSDT 15m 暴涨",
+				Summary: "move_pct=4.81 threshold=3.25",
+				Details: []string{"volume_ratio=4.20 volume_zscore=5.12"},
+			},
+			want: "市场异动\nBTCUSDT 15m 暴涨\nmove_pct=4.81 threshold=3.25\nvolume_ratio=4.20 volume_zscore=5.12",
+		},
 	}
 	for _, tc := range cases {
 		if got := tc.notification.Render(); got != tc.want {

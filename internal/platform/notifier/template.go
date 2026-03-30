@@ -26,6 +26,10 @@ func kindHeading(kind Kind) string {
 		return "canary 降级"
 	case KindDailySummary:
 		return "每日总结"
+	case KindDailySignal:
+		return "日线信号"
+	case KindMarketAlert:
+		return "市场异动"
 	default:
 		return "平台通知"
 	}

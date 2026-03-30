@@ -156,6 +156,41 @@ func TestRuntimeWritesDeadLetterAfterRetryExhausted(t *testing.T) {
 	}
 }
 
+func TestRuntimeSendsInsightAlertFromPlatformEvent(t *testing.T) {
+	store := &runtimeStoreStub{
+		events: []sqlitepkg.EventEnvelope{
+			{
+				Seq:        21,
+				Source:     "platform",
+				EventID:    "insight:daily_signal:BTCUSDT:1d:1710000000:long",
+				Symbol:     "BTCUSDT",
+				Kind:       "insight.alert",
+				ExchangeTS: time.Unix(1710000000, 0).UTC(),
+				Payload: []byte(`{
+					"alert_type":"daily_signal",
+					"title":"BTCUSDT 日线买点",
+					"summary":"score=4.82 threshold=4.60 close=81234.1",
+					"details":["reasons=trend up, break retest"]
+				}`),
+			},
+		},
+	}
+	sink := &sinkStub{}
+	runtime := NewRuntime(RuntimeConfig{
+		Store:   store,
+		Service: sink,
+	})
+	if err := runtime.ProcessAvailable(context.Background()); err != nil {
+		t.Fatalf("process available: %v", err)
+	}
+	if len(sink.notifications) != 1 {
+		t.Fatalf("unexpected notifications: %+v", sink.notifications)
+	}
+	if sink.notifications[0].Kind != KindDailySignal {
+		t.Fatalf("unexpected insight notification: %+v", sink.notifications[0])
+	}
+}
+
 type runtimeStoreStub struct {
 	loadedCursor  int64
 	savedCursor   int64

@@ -82,6 +82,21 @@ systemctl status quantlab-marketd --no-pager -l
 - `marketd` 进程正常运行
 - 新增 symbol 已经被订阅
 
+### 5. 用 dashboard 复核 watchlist 与 insights
+
+`watchlist apply` 完成后，不要只看 batch job 日志，还要从平台控制面确认“新 symbol 已经能被页面和告警逻辑读到”。
+
+```bash
+curl -fsS http://127.0.0.1:8080/ | sed -n '1,40p'
+curl -fsS http://127.0.0.1:8080/api/dashboard | jq '.generated_at, (.symbols | length), (.alerts | length)'
+```
+
+通过标准：
+
+- `/` 返回 Markdown-first HTML 页面
+- `/api/dashboard` 返回 watchlist symbol、最新价格、daily features 与 active alerts
+- 新增 symbol 已经出现在 dashboard JSON 中
+
 ## 验证方式
 
 ### 1. 看整体 interval coverage
@@ -107,6 +122,22 @@ systemctl status quantlab-marketd --no-pager -l
 ```bash
 ./.agents/skills/warehouse-pg-readonly/scripts/warehouse_query.sh gaps --limit 50
 ```
+
+### 5. 看告警与推送链路
+
+```bash
+set -a
+source /etc/quantlab/platform.env
+set +a
+./bin/platformctl notify test --channel dingtalk --message "historical-sync smoke"
+curl -fsS http://127.0.0.1:8080/api/dashboard | jq '.alerts[:5]'
+```
+
+说明：
+
+- DingTalk test 只验证通知面可达
+- `/api/dashboard` 与 `notifierd` 复用同一套 insights 计算逻辑
+- 若 dashboard 有 alert 候选而 DingTalk 无消息，优先检查 `quantlab-notifierd` 与 sqlite `event_log`
 
 ## 已验证样本
 
@@ -167,6 +198,16 @@ watchlist 改完并执行 `watchlist apply` 之后：
 
 - 配置层会自动识别新 symbol
 - 正在运行的 `marketd` 仍然需要重启，才能真正开始订阅新 symbol 并把 closed bar 持续写入 PG
+
+### 4. 告警阈值真相源在 `live.yaml`
+
+当前市场异动阈值全部来自 `configs/live.yaml` 的 `insights`：
+
+- `daily_signal` 负责日线买卖点
+- `anomaly` 负责 `15m` 的 volume spike / surge / dump
+- `dashboard` 负责 watchlist apply runner 与页面渲染限制
+
+不要把阈值散落到脚本、systemd env、或额外 state file 里。
 
 ### 4. Bitget `history-candles` 的真实限制
 
