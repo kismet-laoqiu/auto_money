@@ -66,6 +66,22 @@ PATH=/usr/local/go/bin:$PATH go build -o ./bin/platformctl ./cmd/platformctl
 2. 对 `15m/1h/4h/1d/1w` 做 horizon backfill
 3. 验证 live config 通过 `watchlist_path` 能解析出新的 symbol 集合
 
+### 4. 构建并重启 `marketd`
+
+```bash
+PATH=/usr/local/go/bin:$PATH go build -o ./bin/marketd ./cmd/marketd
+sudo cp deploy/systemd/quantlab-marketd.service /etc/systemd/system/quantlab-marketd.service
+sudo systemctl daemon-reload
+sudo systemctl restart quantlab-marketd
+systemctl status quantlab-marketd --no-pager -l
+```
+
+通过标准：
+
+- `ExecStart` 指向 `configs/live-bitget.yaml`
+- `marketd` 进程正常运行
+- 新增 symbol 已经被订阅
+
 ## 验证方式
 
 ### 1. 看整体 interval coverage
@@ -110,6 +126,14 @@ PATH=/usr/local/go/bin:$PATH go build -o ./bin/platformctl ./cmd/platformctl
 - `1d = 2023-03-31 16:00:00+00`
 - `1w = 2023-04-02 16:00:00+00`
 
+同日已补齐 live warehouse 链路：
+
+- `marketd` 读取 `configs/live-bitget.yaml`
+- `configs/live-bitget.yaml` 通过 `watchlist_path` 解析 15 个 symbol
+- `marketd` 通过 `warehouse_config_path` 连接 PG warehouse
+- 每个 watchlist symbol 订阅 `15m/1h/4h/1d/1w` 五档 candle channel
+- PG `market_bars` 只写 closed bar，不写未收盘的进行中 bar
+
 ## 重要说明
 
 ### 1. 当前是长时间 batch job
@@ -118,18 +142,31 @@ PATH=/usr/local/go/bin:$PATH go build -o ./bin/platformctl ./cmd/platformctl
 
 对完整 watchlist 执行 `watchlist apply` 时，不要把它当成秒级命令。它更像一次运维批处理作业。
 
-### 2. 当前 PG 不是实时仓库
+### 2. 当前 PG 是 closed-bar 实时仓库
 
-当前 PG `market_bars` 只由 historical / aggregate 链路更新。
+当前 PG `market_bars` 分成两条写入路径：
 
-live runtime 事件仍然写 sqlite `state_db`，不是持续写入 PG。
+- historical / aggregate：负责历史回补与离线补齐
+- `marketd` live runtime：负责 `15m/1h/4h/1d/1w` closed bar 持续写入
+
+当前 sqlite `state_db` 仍然保留为 live runtime 事件流真相源，给 `traderd`、cursor、checkpoint 使用。
+
+这两个层次不冲突：
+
+- PG 负责历史研究、回测、导出、仓库分析
+- sqlite 负责运行态 event log
+
+要注意，PG 实时写入的是 closed bar：
+
+- `15m/1h/4h/1d/1w` 只会在 bar 真正收盘后推进
+- `1d/1w` 的 freshness 天然慢于分钟级，不要把这个误判成异常
 
 ### 3. 当前 live 不是 hot reload
 
 watchlist 改完并执行 `watchlist apply` 之后：
 
 - 配置层会自动识别新 symbol
-- 正在运行的 `marketd` 仍然需要重启，才能真正开始订阅新 symbol
+- 正在运行的 `marketd` 仍然需要重启，才能真正开始订阅新 symbol 并把 closed bar 持续写入 PG
 
 ### 4. Bitget `history-candles` 的真实限制
 

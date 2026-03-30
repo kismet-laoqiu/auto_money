@@ -51,3 +51,28 @@ func TestDecodeFuturesTickerResponseFallsBackToMarkPrice(t *testing.T) {
 		t.Fatalf("unexpected fallback ticker price: %f", price)
 	}
 }
+
+func TestCandleGranularityMapsCanonicalIntervalsToBitgetFormat(t *testing.T) {
+	cases := map[string]string{
+		"1m":  "1m",
+		"15m": "15m",
+		"1h":  "1H",
+		"4h":  "4H",
+		"1d":  "1D",
+		"1w":  "1W",
+	}
+	for input, want := range cases {
+		if got := candleGranularity(input); got != want {
+			t.Fatalf("unexpected granularity for %s: got=%s want=%s", input, got, want)
+		}
+	}
+}
+
+func TestCandleChannelUsesBitgetGranularity(t *testing.T) {
+	if got := CandleChannel("1h"); got != "candle1H" {
+		t.Fatalf("unexpected 1h channel: %s", got)
+	}
+	if got := CandleChannel("1w"); got != "candle1W" {
+		t.Fatalf("unexpected 1w channel: %s", got)
+	}
+}

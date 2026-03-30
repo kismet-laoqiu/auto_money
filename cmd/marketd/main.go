@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -11,17 +12,34 @@ import (
 	"syscall"
 
 	"quantlab/internal/config"
+	"quantlab/internal/core"
 	"quantlab/internal/exchange/bitget"
 	"quantlab/internal/market"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
+	"quantlab/internal/warehouse/catalog"
+	"quantlab/internal/warehouse/ingest"
+	"quantlab/internal/watchlist"
 )
 
 type marketRuntimeRunner interface {
 	Run(context.Context) error
 }
 
-var newSQLiteStore = sqlitepkg.NewStore
+type liveEventStore interface {
+	AppendEvent(ctx context.Context, source string, evt sqlitepkg.LogEvent, raw []byte) (int64, error)
+}
+
+type warehouseBarStore interface {
+	UpsertBars(ctx context.Context, spec config.DatasetConfig, bars []core.Bar) (int, error)
+}
+
+type warehouseConfig = catalog.Config
+type warehouseDB = *sql.DB
+
+var newSQLiteStore = func(path string) (liveEventStore, error) {
+	return sqlitepkg.NewStore(path)
+}
 var newPublicBitgetClient = func(baseURL string) market.BootstrapLoader {
 	return bitget.NewClient(baseURL)
 }
@@ -32,7 +50,7 @@ var newPublicWSSource = func(url string, productType string, interval string, sy
 	return bitget.NewPublicWSSource(
 		url,
 		bitget.PublicSubscription{InstType: productType, Channel: "trade", InstID: symbol},
-		bitget.PublicSubscription{InstType: productType, Channel: "candle" + interval, InstID: symbol},
+		bitget.PublicSubscription{InstType: productType, Channel: bitget.CandleChannel(interval), InstID: symbol},
 	)
 }
 var newPrivateWSSource = func(url string, creds bitget.PrivateCredentials, productType string) market.EventSource {
@@ -44,8 +62,20 @@ var newPrivateWSSource = func(url string, creds bitget.PrivateCredentials, produ
 		bitget.PrivateSubscription{InstType: productType, Channel: "account", Coin: "default"},
 	)
 }
+var newWarehouseWSSource = func(url string, productType string, interval string, symbol string) market.EventSource {
+	return bitget.NewPublicWSSource(
+		url,
+		bitget.PublicSubscription{InstType: productType, Channel: bitget.CandleChannel(interval), InstID: symbol},
+	)
+}
 var newMarketRuntime = func(cfg market.RuntimeConfig) marketRuntimeRunner {
 	return market.NewRuntime(cfg)
+}
+var loadWatchlistFile = watchlist.Load
+var loadWarehouseConfig = catalog.LoadConfig
+var openWarehouseDB = catalog.Open
+var newWarehouseStore = func(db warehouseDB) warehouseBarStore {
+	return ingest.NewPostgresStore(db)
 }
 
 func main() {
@@ -76,6 +106,13 @@ func run(ctx context.Context, cfg config.Config) error {
 	store, err := newSQLiteStore(cfg.Live.Runtime.StateDBPath)
 	if err != nil {
 		return err
+	}
+	warehouseStore, warehouseIntervals, closeWarehouse, err := setupWarehouse(cfg)
+	if err != nil {
+		return err
+	}
+	if closeWarehouse != nil {
+		defer closeWarehouse()
 	}
 	if len(cfg.Live.Exchange.Symbols) == 0 {
 		return fmt.Errorf("live.exchange.symbols is empty")
@@ -119,6 +156,19 @@ func run(ctx context.Context, cfg config.Config) error {
 			Source:         newPublicWSSource(cfg.Live.Exchange.PublicWSURL, cfg.Live.Exchange.ProductType, interval, symbol),
 			Decoder:        bitget.NewPublicWSDecoder(),
 		}))
+		for _, warehouseInterval := range warehouseIntervals {
+			runtimes = append(runtimes, newMarketRuntime(market.RuntimeConfig{
+				Symbol:         symbol,
+				ProductType:    cfg.Live.Exchange.ProductType,
+				MarginCoin:     marginCoinForProductType(cfg.Live.Exchange.ProductType),
+				Interval:       warehouseInterval,
+				BootstrapLimit: bootstrapLimit,
+				AppendEvent:    appendWarehouseBar(warehouseStore, cfg.Live.Exchange.Venue, cfg.Live.Exchange.ProductType, symbol, warehouseInterval),
+				Loader:         newPublicBitgetClient(cfg.Live.Exchange.RESTBaseURL),
+				Source:         newWarehouseWSSource(cfg.Live.Exchange.PublicWSURL, cfg.Live.Exchange.ProductType, warehouseInterval, symbol),
+				Decoder:        bitget.NewPublicWSDecoder(),
+			}))
+		}
 	}
 	if privateClient != nil && privateSource != nil {
 		runtimes = append(runtimes, newMarketRuntime(market.RuntimeConfig{
@@ -155,6 +205,66 @@ func run(ctx context.Context, cfg config.Config) error {
 		}
 	}
 	return nil
+}
+
+func setupWarehouse(cfg config.Config) (warehouseBarStore, []string, func() error, error) {
+	if cfg.WarehouseConfigPath == "" || cfg.WatchlistPath == "" {
+		return nil, nil, nil, nil
+	}
+	file, err := loadWatchlistFile(cfg.WatchlistPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	intervals := file.HistoricalIntervals
+	if len(intervals) == 0 {
+		return nil, nil, nil, nil
+	}
+	warehouseCfg, err := loadWarehouseConfig(cfg.WarehouseConfigPath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	db, err := openWarehouseDB(warehouseCfg)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	closeFn := func() error {
+		if db == nil {
+			return nil
+		}
+		return db.Close()
+	}
+	return newWarehouseStore(db), append([]string(nil), intervals...), closeFn, nil
+}
+
+func appendWarehouseBar(store warehouseBarStore, provider string, productType string, symbol string, interval string) market.AppendEventFunc {
+	if strings.TrimSpace(provider) == "" {
+		provider = "bitget"
+	}
+	spec := config.DatasetConfig{
+		Name:        strings.ToLower(strings.TrimSpace(symbol)) + "_" + strings.ToLower(strings.TrimSpace(interval)),
+		Provider:    provider,
+		Symbol:      symbol,
+		Interval:    interval,
+		ProductType: productType,
+	}
+	return func(ctx context.Context, source string, evt market.MarketEvent, raw []byte) (int64, error) {
+		bar, ok := evt.(market.BarClosedEvent)
+		if !ok || store == nil {
+			return 0, nil
+		}
+		if bar.SymbolValue != symbol || bar.Interval != interval {
+			return 0, nil
+		}
+		inserted, err := store.UpsertBars(ctx, spec, []core.Bar{{
+			Time:   bar.Ts.UTC(),
+			Open:   bar.Open,
+			High:   bar.High,
+			Low:    bar.Low,
+			Close:  bar.Close,
+			Volume: bar.Volume,
+		}})
+		return int64(inserted), err
+	}
 }
 
 func marginCoinForProductType(productType string) string {

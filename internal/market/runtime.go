@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type AppendEventFunc func(ctx context.Context, source string, evt MarketEvent, raw []byte) (int64, error)
@@ -89,6 +90,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		events = filterClosedBootstrapBars(events, runtime.cfg.Interval, time.Now().UTC())
 		for _, event := range events {
 			if err := runtime.appendEvent(ctx, "market.bootstrap", event); err != nil {
 				return err
@@ -170,4 +172,40 @@ func mustJSON(value any) []byte {
 		panic(err)
 	}
 	return body
+}
+
+func filterClosedBootstrapBars(events []BarClosedEvent, interval string, now time.Time) []BarClosedEvent {
+	step, ok := bootstrapIntervalDuration(interval)
+	if !ok {
+		return append([]BarClosedEvent(nil), events...)
+	}
+	out := make([]BarClosedEvent, 0, len(events))
+	for _, event := range events {
+		if event.Ts.UTC().Add(step).After(now.UTC()) {
+			continue
+		}
+		out = append(out, event)
+	}
+	return out
+}
+
+func bootstrapIntervalDuration(interval string) (time.Duration, bool) {
+	switch strings.ToLower(strings.TrimSpace(interval)) {
+	case "1m":
+		return time.Minute, true
+	case "5m":
+		return 5 * time.Minute, true
+	case "15m":
+		return 15 * time.Minute, true
+	case "1h":
+		return time.Hour, true
+	case "4h":
+		return 4 * time.Hour, true
+	case "1d":
+		return 24 * time.Hour, true
+	case "1w":
+		return 7 * 24 * time.Hour, true
+	default:
+		return 0, false
+	}
 }

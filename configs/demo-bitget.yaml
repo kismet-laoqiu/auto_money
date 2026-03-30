@@ -1,6 +1,7 @@
 cache_dir: data
 artifact_dir: artifacts/demo-bitget-btc-legacy
 watchlist_path: platform/watchlist.yaml
+warehouse_config_path: platform/warehouse.yaml
 strategy:
   fast_sma: 15
   slow_sma: 60

@@ -31,7 +31,7 @@ func (client *Client) FetchCandles(ctx context.Context, symbol, productType, int
 		"/api/v2/mix/market/candles?symbol=%s&productType=%s&granularity=%s&limit=%d",
 		url.QueryEscape(symbol),
 		url.QueryEscape(productType),
-		url.QueryEscape(interval),
+		url.QueryEscape(candleGranularity(interval)),
 		limit,
 	)
 	body, err := client.doPublic(ctx, http.MethodGet, path)
@@ -181,4 +181,23 @@ func decodeCandleEvents(symbol, interval string, body []byte) ([]market.BarClose
 		return events[i].Ts.Before(events[j].Ts)
 	})
 	return events, nil
+}
+
+func CandleChannel(interval string) string {
+	return "candle" + candleGranularity(interval)
+}
+
+func candleGranularity(interval string) string {
+	switch strings.ToLower(strings.TrimSpace(interval)) {
+	case "1h":
+		return "1H"
+	case "4h":
+		return "4H"
+	case "1d":
+		return "1D"
+	case "1w":
+		return "1W"
+	default:
+		return strings.TrimSpace(interval)
+	}
 }

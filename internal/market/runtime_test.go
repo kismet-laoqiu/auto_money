@@ -199,3 +199,19 @@ func TestRuntimeIgnoresDuplicateBootstrapEventsOnRestart(t *testing.T) {
 		t.Fatalf("unexpected event count after restart: %d", len(store.events))
 	}
 }
+
+func TestFilterClosedBootstrapBarsDropsOpenBar(t *testing.T) {
+	now := time.Date(2026, 3, 30, 9, 31, 0, 0, time.UTC)
+	events := []BarClosedEvent{
+		{EventIDValue: "bar-closed", SymbolValue: "BTCUSDT", Interval: "15m", Ts: time.Date(2026, 3, 30, 9, 0, 0, 0, time.UTC)},
+		{EventIDValue: "bar-open", SymbolValue: "BTCUSDT", Interval: "15m", Ts: time.Date(2026, 3, 30, 9, 30, 0, 0, time.UTC)},
+	}
+
+	got := filterClosedBootstrapBars(events, "15m", now)
+	if len(got) != 1 {
+		t.Fatalf("unexpected filtered event count: %d", len(got))
+	}
+	if got[0].EventIDValue != "bar-closed" {
+		t.Fatalf("unexpected filtered events: %+v", got)
+	}
+}

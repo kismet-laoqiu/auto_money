@@ -21,6 +21,9 @@ func LoadConfig(path string) (config.Config, *Bundle, error) {
 	if cfg.WatchlistPath != "" && !filepath.IsAbs(cfg.WatchlistPath) {
 		cfg.WatchlistPath = filepath.Clean(filepath.Join(filepath.Dir(path), cfg.WatchlistPath))
 	}
+	if cfg.WarehouseConfigPath != "" && !filepath.IsAbs(cfg.WarehouseConfigPath) {
+		cfg.WarehouseConfigPath = filepath.Clean(filepath.Join(filepath.Dir(path), cfg.WarehouseConfigPath))
+	}
 	return ResolveConfig(cfg)
 }
 

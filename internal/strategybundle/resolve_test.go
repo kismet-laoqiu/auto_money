@@ -100,6 +100,25 @@ func TestLoadConfigResolvesDemoBundleConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfigResolvesWarehouseConfigPathRelativeToConfigFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("warehouse_config_path: warehouse.yaml\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	resolved, bundle, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if bundle != nil {
+		t.Fatalf("unexpected bundle: %+v", bundle)
+	}
+	if resolved.WarehouseConfigPath != filepath.Join(dir, "warehouse.yaml") {
+		t.Fatalf("unexpected warehouse config path: %s", resolved.WarehouseConfigPath)
+	}
+}
+
 func TestLoadConfigOverlaysWatchlistSymbolsIntoLiveAndStream(t *testing.T) {
 	dir := t.TempDir()
 	watchlistPath := filepath.Join(dir, "watchlist.yaml")
