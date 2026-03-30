@@ -8,14 +8,15 @@ import (
 )
 
 type Config struct {
-	CacheDir    string          `yaml:"cache_dir"`
-	ArtifactDir string          `yaml:"artifact_dir"`
-	Objective   ObjectiveConfig `yaml:"objective"`
-	Strategy    StrategyConfig  `yaml:"strategy"`
-	Datasets    []DatasetConfig `yaml:"datasets"`
-	Stream      StreamConfig    `yaml:"stream"`
-	Notify      NotifyConfig    `yaml:"notify"`
-	Live        LiveConfig      `yaml:"live"`
+	CacheDir           string          `yaml:"cache_dir"`
+	ArtifactDir        string          `yaml:"artifact_dir"`
+	StrategyBundlePath string          `yaml:"strategy_bundle_path"`
+	Objective          ObjectiveConfig `yaml:"objective"`
+	Strategy           StrategyConfig  `yaml:"strategy"`
+	Datasets           []DatasetConfig `yaml:"datasets"`
+	Stream             StreamConfig    `yaml:"stream"`
+	Notify             NotifyConfig    `yaml:"notify"`
+	Live               LiveConfig      `yaml:"live"`
 }
 
 type ObjectiveConfig struct {

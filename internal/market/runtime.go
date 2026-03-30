@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 type AppendEventFunc func(ctx context.Context, source string, evt MarketEvent, raw []byte) (int64, error)
@@ -89,7 +90,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context) error {
 			return err
 		}
 		for _, event := range events {
-			if _, err := runtime.cfg.AppendEvent(ctx, "market.bootstrap", event, mustJSON(event)); err != nil {
+			if err := runtime.appendEvent(ctx, "market.bootstrap", event); err != nil {
 				return err
 			}
 		}
@@ -102,7 +103,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context) error {
 		return err
 	}
 	for _, event := range accounts {
-		if _, err := runtime.cfg.AppendEvent(ctx, "market.private", event, mustJSON(event)); err != nil {
+		if err := runtime.appendEvent(ctx, "market.private", event); err != nil {
 			return err
 		}
 	}
@@ -111,7 +112,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context) error {
 		return err
 	}
 	for _, event := range positions {
-		if _, err := runtime.cfg.AppendEvent(ctx, "market.private", event, mustJSON(event)); err != nil {
+		if err := runtime.appendEvent(ctx, "market.private", event); err != nil {
 			return err
 		}
 	}
@@ -121,7 +122,7 @@ func (runtime *Runtime) bootstrap(ctx context.Context) error {
 func (runtime *Runtime) runPublic(ctx context.Context) error {
 	feed := NewPublicFeed(runtime.cfg.Source, runtime.cfg.Decoder, runtime.cfg.Aggregator)
 	for event := range feed.Events(ctx) {
-		if _, err := runtime.cfg.AppendEvent(ctx, "market.public", event, mustJSON(event)); err != nil {
+		if err := runtime.appendEvent(ctx, "market.public", event); err != nil {
 			return err
 		}
 	}
@@ -143,12 +144,24 @@ func (runtime *Runtime) runPrivate(ctx context.Context) error {
 				continue
 			}
 			for _, event := range events {
-				if _, err := runtime.cfg.AppendEvent(ctx, "market.private", event, mustJSON(event)); err != nil {
+				if err := runtime.appendEvent(ctx, "market.private", event); err != nil {
 					return err
 				}
 			}
 		}
 	}
+}
+
+func (runtime *Runtime) appendEvent(ctx context.Context, source string, event MarketEvent) error {
+	_, err := runtime.cfg.AppendEvent(ctx, source, event, mustJSON(event))
+	if isDuplicateEventErr(err) {
+		return nil
+	}
+	return err
+}
+
+func isDuplicateEventErr(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "event_log.event_id")
 }
 
 func mustJSON(value any) []byte {

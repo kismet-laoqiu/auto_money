@@ -23,7 +23,7 @@ func TestReplayHarnessReusesTraderEngine(t *testing.T) {
 	if report.EventCount != 2 {
 		t.Fatalf("unexpected replay report: %+v", report)
 	}
-	if report.CommandCount != 2 || report.CandidateCount != 2 {
+	if report.CommandCount != 4 || report.CandidateCount != 2 {
 		t.Fatalf("unexpected command counts: %+v", report)
 	}
 	if report.Simulation.CandidatesApplied != 2 {
@@ -45,7 +45,7 @@ func TestReplayHarnessUsesRuntimeReconcilePath(t *testing.T) {
 	if report.FinalState.ArmingState != trader.ArmingDegraded {
 		t.Fatalf("expected degraded final state, got %+v", report.FinalState)
 	}
-	if report.CommandCount != 2 || report.CandidateCount != 1 {
+	if report.CommandCount != 3 || report.CandidateCount != 1 {
 		t.Fatalf("unexpected replay report after reconcile: %+v", report)
 	}
 }

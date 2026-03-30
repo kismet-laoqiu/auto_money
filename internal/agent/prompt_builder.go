@@ -50,7 +50,7 @@ type JobRequest struct {
 
 func BuildJobPrompt(job JobRequest) string {
 	return fmt.Sprintf(
-		"You are operating inside agentd. This is advisory only. Do not issue exchange commands. Job=%s subject=%s. Task=%s",
+		"You are operating inside researchd. This is advisory only. Do not issue exchange commands. Job=%s subject=%s. Task=%s",
 		job.Kind,
 		job.Subject,
 		job.Body,

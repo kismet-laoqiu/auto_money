@@ -248,8 +248,7 @@ func TestRealBitgetOrderLifecycleAndPrivateStream(t *testing.T) {
 		t.Fatalf("wait for private account snapshot: %v", err)
 	}
 
-	openQty, err := waitForPositionQty(ctx, client, func(qty float64) bool { return qty > 0 })
-	if err != nil {
+	if _, err := waitForPositionQty(ctx, client, func(qty float64) bool { return qty > 0 }); err != nil {
 		t.Fatalf("wait for live open position: %v", err)
 	}
 
@@ -258,7 +257,7 @@ func TestRealBitgetOrderLifecycleAndPrivateStream(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetch single position before close: %v", err)
 	}
-	closeReq := buildCloseRequest(openQty, positionSnapshot.Mode)
+	closeReq := buildCloseRequest(positionSnapshot.Qty, positionSnapshot.Mode)
 	closeReq.ClientOID = closeClientOID
 	closeResult, err := client.PlaceOrder(ctx, closeReq)
 	if err != nil {

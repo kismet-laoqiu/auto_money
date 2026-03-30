@@ -6,23 +6,16 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"time"
 
 	"quantlab/internal/adapters"
-	"quantlab/internal/config"
-	"quantlab/internal/core"
+	"quantlab/internal/backtest"
 	"quantlab/internal/replay"
+	"quantlab/internal/strategybundle"
 	"quantlab/internal/trader"
 )
 
-type evalOutput struct {
-	GeneratedAt    time.Time          `json:"generated_at"`
-	MetricName     string             `json:"metric_name"`
-	ObjectiveScore float64            `json:"objective_score"`
-	FinalScore     float64            `json:"final_score"`
-	Robust         core.RobustScore   `json:"robust"`
-	Aggregate      map[string]float64 `json:"aggregate"`
-	Reports        []core.Report      `json:"reports"`
+type evalRunner interface {
+	RunConfig(ctx context.Context, configPath string, refresh bool) (backtest.Result, error)
 }
 
 func main() {
@@ -61,7 +54,7 @@ func runFetch(args []string) error {
 		return err
 	}
 
-	cfg, err := config.Load(*configPath)
+	cfg, _, err := strategybundle.LoadConfig(*configPath)
 	if err != nil {
 		return err
 	}
@@ -78,6 +71,10 @@ func runFetch(args []string) error {
 }
 
 func runEval(args []string) error {
+	return runEvalWithRunner(args, backtest.NewService(backtest.Config{Loader: adapters.NewClient()}))
+}
+
+func runEvalWithRunner(args []string, runner evalRunner) error {
 	fs := flag.NewFlagSet("eval", flag.ContinueOnError)
 	configPath := fs.String("config", "configs/baseline.yaml", "config file")
 	refresh := fs.Bool("refresh", false, "refresh remote data")
@@ -85,42 +82,19 @@ func runEval(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if runner == nil {
+		return fmt.Errorf("backtest runner is nil")
+	}
 
-	cfg, err := config.Load(*configPath)
+	result, err := runner.RunConfig(context.Background(), *configPath, *refresh)
 	if err != nil {
 		return err
-	}
-	ctx := context.Background()
-	client := adapters.NewClient()
-	reports := make([]core.Report, 0, len(cfg.Datasets))
-	for _, spec := range cfg.Datasets {
-		dataset, err := client.EnsureDataset(ctx, cfg.CacheDir, spec, *refresh)
-		if err != nil {
-			return err
-		}
-		report := core.BacktestDataset(dataset, cfg.Strategy, cfg.Objective)
-		if err := adapters.WriteReportArtifacts(cfg.ArtifactDir, report); err != nil {
-			return err
-		}
-		reports = append(reports, report)
-	}
-
-	aggregate := core.AggregateReports(reports)
-	robust := core.BuildRobustScore(reports)
-	output := evalOutput{
-		GeneratedAt:    time.Now().UTC(),
-		MetricName:     "final_score",
-		ObjectiveScore: aggregate.ObjectiveScore,
-		FinalScore:     robust.FinalScore,
-		Robust:         robust,
-		Aggregate:      aggregate.Metrics,
-		Reports:        reports,
 	}
 	encoder := json.NewEncoder(os.Stdout)
 	if *pretty {
 		encoder.SetIndent("", "  ")
 	}
-	return encoder.Encode(output)
+	return encoder.Encode(result)
 }
 
 func runReplay(args []string) error {
@@ -132,7 +106,7 @@ func runReplay(args []string) error {
 		return err
 	}
 
-	cfg, err := config.Load(*configPath)
+	cfg, bundle, err := strategybundle.LoadConfig(*configPath)
 	if err != nil {
 		return err
 	}
@@ -141,9 +115,13 @@ func runReplay(args []string) error {
 	if err != nil {
 		return err
 	}
+	strategy := trader.Strategy(trader.LegacyRuleProfile{StrategyCfg: cfg.Strategy})
+	if bundle != nil {
+		strategy = trader.BundleStrategy{Bundle: *bundle}
+	}
 	engine := trader.NewEngine(trader.Config{
 		ArmingState: trader.ArmingArmed,
-		Strategy:    trader.LegacyRuleProfile{StrategyCfg: cfg.Strategy},
+		Strategy:    strategy,
 	})
 	harness := replay.NewHarness(engine, replay.NewLongOnlySimulator())
 	report, err := harness.RunAndWrite(events, cfg.ArtifactDir)

@@ -1,0 +1,9 @@
+datasets:
+  - name: mstrusdt_demo_replay
+    provider: bitget
+    symbol: MSTRUSDT
+    interval: 1m
+    limit: 720
+    product_type: USDT-FUTURES
+symbols:
+  - MSTRUSDT

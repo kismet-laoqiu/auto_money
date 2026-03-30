@@ -1,0 +1,4 @@
+[Unit]
+Description=QuantLab platform target
+Wants=quantlab-marketd.service quantlab-traderd.service quantlab-execd.service quantlab-platformd.service quantlab-notifierd.service quantlab-mcpd.service
+After=network-online.target

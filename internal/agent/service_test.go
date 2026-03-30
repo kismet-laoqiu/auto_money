@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -101,6 +102,31 @@ func TestServiceStartBackgroundJobUsesBackgroundEndpoint(t *testing.T) {
 	}
 }
 
+func TestServiceStartBackgroundJobFallsBackToForegroundWhenProviderRejectsBackground(t *testing.T) {
+	client := &fakeResponsesClient{
+		backgroundErr:  errors.New("openai responses POST https://right.codes/codex/v1/responses: unsupported parameter: background"),
+		createResponse: CreateResponse{ID: "resp-sync", Status: "completed"},
+	}
+	service := NewService(client, Config{Model: "gpt-5.4", Store: true})
+	resp, err := service.StartBackgroundJob(context.Background(), JobRequest{
+		Kind:    "nightly_report",
+		Subject: "mstr-wave-fib",
+		Body:    "Prepare the nightly summary.",
+	})
+	if err != nil {
+		t.Fatalf("start background job with fallback: %v", err)
+	}
+	if resp.ID != "resp-sync" || resp.Status != "completed" {
+		t.Fatalf("unexpected fallback response: %+v", resp)
+	}
+	if client.backgroundCalls != 1 || client.createCalls != 1 {
+		t.Fatalf("unexpected client usage: %+v", client)
+	}
+	if client.lastCreate.Background {
+		t.Fatalf("fallback foreground request must clear background: %+v", client.lastCreate)
+	}
+}
+
 func TestServicePollResponseDelegatesToGet(t *testing.T) {
 	client := &fakeResponsesClient{getResponse: CreateResponse{ID: "resp-job", Status: "completed"}}
 	service := NewService(client, Config{Model: "gpt-5.4", Store: true})
@@ -118,8 +144,11 @@ func TestServicePollResponseDelegatesToGet(t *testing.T) {
 
 type fakeResponsesClient struct {
 	createResponse     CreateResponse
+	createErr          error
 	backgroundResponse CreateResponse
+	backgroundErr      error
 	getResponse        CreateResponse
+	getErr             error
 	lastCreate         CreateRequest
 	lastBackground     CreateRequest
 	createCalls        int
@@ -130,17 +159,26 @@ type fakeResponsesClient struct {
 func (client *fakeResponsesClient) Create(_ context.Context, req CreateRequest) (CreateResponse, error) {
 	client.createCalls++
 	client.lastCreate = req
+	if client.createErr != nil {
+		return CreateResponse{}, client.createErr
+	}
 	return client.createResponse, nil
 }
 
 func (client *fakeResponsesClient) CreateBackground(_ context.Context, req CreateRequest) (CreateResponse, error) {
 	client.backgroundCalls++
 	client.lastBackground = req
+	if client.backgroundErr != nil {
+		return CreateResponse{}, client.backgroundErr
+	}
 	return client.backgroundResponse, nil
 }
 
 func (client *fakeResponsesClient) Get(_ context.Context, responseID string) (CreateResponse, error) {
 	client.getCalls++
+	if client.getErr != nil {
+		return CreateResponse{}, client.getErr
+	}
 	if client.getResponse.ID == "" {
 		client.getResponse = CreateResponse{ID: responseID}
 	}

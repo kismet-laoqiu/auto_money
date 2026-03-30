@@ -7,17 +7,12 @@ import (
 	"strings"
 
 	"quantlab/internal/core"
-	"quantlab/internal/exchange/bitget"
 )
 
 const (
-	defaultEntryQtyValue = 0.01
-	defaultEntryQtyText  = "0.01"
+	intentMinNotionalUSDT = 5.0
+	intentQtyStep         = 0.01
 )
-
-type LiveExchange interface {
-	PlaceOrder(req bitget.PlaceOrderRequest) error
-}
 
 type SymbolPosition struct {
 	Symbol      string
@@ -32,44 +27,30 @@ func BuildClientOID(runID, symbol string, tranche int, tsMillis int64) string {
 	return fmt.Sprintf("ql-%s-%s-%d-%d", runID, short, tranche, tsMillis)
 }
 
-func BuildEntryRequest(runID string, candidate Candidate) bitget.PlaceOrderRequest {
-	side := "buy"
-	if candidate.Side == core.Short {
-		side = "sell"
+func ComputeIntentSizeText(entryPrice float64) string {
+	price := entryPrice
+	if price <= 0 {
+		price = 1
 	}
-	return bitget.PlaceOrderRequest{
-		Symbol:      candidate.Symbol,
-		ProductType: "USDT-FUTURES",
-		MarginMode:  "isolated",
-		MarginCoin:  "USDT",
-		Side:        side,
-		TradeSide:   "open",
-		OrderType:   "market",
-		Size:        defaultEntryQtyText,
-		ClientOID:   BuildClientOID(defaultString(runID, "runtime"), candidate.Symbol, 1, candidate.Ts.UnixMilli()),
+	steps := math.Ceil((intentMinNotionalUSDT / price) / intentQtyStep)
+	if steps < 1 {
+		steps = 1
 	}
+	return strconv.FormatFloat(steps*intentQtyStep, 'f', 2, 64)
 }
 
-func BuildExitRequest(position SymbolPosition) bitget.PlaceOrderRequest {
-	side := "sell"
-	if position.Qty < 0 {
-		side = "buy"
+func parseIntentSize(size string) float64 {
+	qty, err := strconv.ParseFloat(size, 64)
+	if err != nil {
+		return 0
 	}
-	return bitget.PlaceOrderRequest{
-		Symbol:      position.Symbol,
-		ProductType: defaultString(position.ProductType, "USDT-FUTURES"),
-		MarginMode:  defaultString(position.MarginMode, "isolated"),
-		MarginCoin:  defaultString(position.MarginCoin, "USDT"),
-		Side:        side,
-		OrderType:   "market",
-		Size:        strconv.FormatFloat(math.Abs(position.Qty), 'f', -1, 64),
-		ReduceOnly:  "YES",
-	}
+	return qty
 }
 
-func defaultString(value, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
+func signedIntentQty(intent EntryIntentEvent) float64 {
+	qty := parseIntentSize(intent.Size)
+	if intent.Side == core.Short {
+		return -qty
 	}
-	return value
+	return qty
 }

@@ -209,17 +209,36 @@ func TestFetchPrivateSnapshotsUsesExpectedPaths(t *testing.T) {
 				return err
 			},
 		},
+		{
+			name: "fetch single position",
+			path: "/api/v2/mix/position/single-position?symbol=MSTRUSDT&productType=USDT-FUTURES&marginCoin=USDT",
+			run: func(ctx context.Context, client *Client) error {
+				_, err := client.FetchSinglePosition(ctx, "MSTRUSDT", "USDT-FUTURES", "USDT")
+				return err
+			},
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.String() != tc.path {
-					t.Fatalf("unexpected path: %s", r.URL.String())
+				expected, err := url.Parse(tc.path)
+				if err != nil {
+					t.Fatalf("parse expected path: %v", err)
+				}
+				if r.URL.Path != expected.Path {
+					t.Fatalf("unexpected path: %s", r.URL.Path)
+				}
+				if r.URL.Query().Encode() != expected.Query().Encode() {
+					t.Fatalf("unexpected query: got=%s want=%s", r.URL.Query().Encode(), expected.Query().Encode())
 				}
 				w.Header().Set("Content-Type", "application/json")
 				if strings.Contains(r.URL.Path, "accounts") {
 					_, _ = w.Write([]byte(`{"code":"00000","msg":"success","data":[{"marginCoin":"USDT","available":"10","equity":"12","usdtEquity":"12","unrealizedPL":"0"}]}`))
+					return
+				}
+				if strings.Contains(r.URL.Path, "single-position") {
+					_, _ = w.Write([]byte(`{"code":"00000","msg":"success","data":[{"holdSide":"long","total":"0.04","posMode":"one_way_mode"}]}`))
 					return
 				}
 				_, _ = w.Write([]byte(`{"code":"00000","msg":"success","data":[{"symbol":"MSTRUSDT","holdSide":"long","total":"0.01","uTime":"1710000000000"}]}`))
@@ -235,6 +254,68 @@ func TestFetchPrivateSnapshotsUsesExpectedPaths(t *testing.T) {
 				t.Fatalf("%s: %v", tc.name, err)
 			}
 		})
+	}
+}
+
+func TestFetchSinglePositionDecodesSignedQtyAndMode(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expected, err := url.Parse("/api/v2/mix/position/single-position?symbol=MSTRUSDT&productType=USDT-FUTURES&marginCoin=USDT")
+		if err != nil {
+			t.Fatalf("parse expected path: %v", err)
+		}
+		if r.URL.Path != expected.Path {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Encode() != expected.Query().Encode() {
+			t.Fatalf("unexpected query: got=%s want=%s", r.URL.Query().Encode(), expected.Query().Encode())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"00000","msg":"success","data":[{"holdSide":"short","total":"0.04","posMode":"hedge_mode"}]}`))
+	}))
+	defer server.Close()
+
+	client := NewPrivateClient(server.URL, PrivateCredentials{
+		Key:        "key",
+		Secret:     "secret",
+		Passphrase: "pass",
+	})
+	got, err := client.FetchSinglePosition(context.Background(), "MSTRUSDT", "USDT-FUTURES", "USDT")
+	if err != nil {
+		t.Fatalf("fetch single position: %v", err)
+	}
+	if got.Qty != -0.04 || got.Mode != "hedge_mode" {
+		t.Fatalf("unexpected snapshot: %+v", got)
+	}
+}
+
+func TestFetchSinglePositionEmptyDataReturnsFlatSnapshot(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expected, err := url.Parse("/api/v2/mix/position/single-position?symbol=MSTRUSDT&productType=USDT-FUTURES&marginCoin=USDT")
+		if err != nil {
+			t.Fatalf("parse expected path: %v", err)
+		}
+		if r.URL.Path != expected.Path {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.URL.Query().Encode() != expected.Query().Encode() {
+			t.Fatalf("unexpected query: got=%s want=%s", r.URL.Query().Encode(), expected.Query().Encode())
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"00000","msg":"success","data":[]}`))
+	}))
+	defer server.Close()
+
+	client := NewPrivateClient(server.URL, PrivateCredentials{
+		Key:        "key",
+		Secret:     "secret",
+		Passphrase: "pass",
+	})
+	got, err := client.FetchSinglePosition(context.Background(), "MSTRUSDT", "USDT-FUTURES", "USDT")
+	if err != nil {
+		t.Fatalf("fetch single position: %v", err)
+	}
+	if got.Qty != 0 || got.Mode != "" {
+		t.Fatalf("unexpected empty-position snapshot: %+v", got)
 	}
 }
 

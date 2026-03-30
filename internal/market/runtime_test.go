@@ -2,6 +2,7 @@ package market
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -69,6 +70,23 @@ type recordingStore struct {
 }
 
 func (store *recordingStore) AppendEvent(_ context.Context, source string, evt MarketEvent, _ []byte) (int64, error) {
+	store.events = append(store.events, recordedEvent{source: source, kind: evt.Kind()})
+	return int64(len(store.events)), nil
+}
+
+type dedupeRecordingStore struct {
+	events []recordedEvent
+	seen   map[string]bool
+}
+
+func (store *dedupeRecordingStore) AppendEvent(_ context.Context, source string, evt MarketEvent, _ []byte) (int64, error) {
+	if store.seen == nil {
+		store.seen = map[string]bool{}
+	}
+	if store.seen[evt.EventID()] {
+		return 0, fmt.Errorf("UNIQUE constraint failed: event_log.event_id")
+	}
+	store.seen[evt.EventID()] = true
 	store.events = append(store.events, recordedEvent{source: source, kind: evt.Kind()})
 	return int64(len(store.events)), nil
 }
@@ -152,5 +170,32 @@ func TestRuntimePersistsPrivateBootstrapAndStreamingEvents(t *testing.T) {
 	}
 	if counts["market.public:trade_tick"] != 1 {
 		t.Fatalf("missing public trade event: %+v", counts)
+	}
+}
+
+func TestRuntimeIgnoresDuplicateBootstrapEventsOnRestart(t *testing.T) {
+	store := &dedupeRecordingStore{}
+	runtime := NewRuntime(RuntimeConfig{
+		Symbol:         "MSTRUSDT",
+		ProductType:    "USDT-FUTURES",
+		Interval:       "1m",
+		BootstrapLimit: 1,
+		AppendEvent:    store.AppendEvent,
+		Loader: fakeBootstrapLoader{events: []BarClosedEvent{{
+			EventIDValue: "bootstrap-1",
+			SymbolValue:  "MSTRUSDT",
+			Interval:     "1m",
+			Ts:           time.Unix(1710000000, 0),
+			Close:        62000,
+		}}},
+	})
+	if err := runtime.Run(context.Background()); err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if err := runtime.Run(context.Background()); err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	if len(store.events) != 1 {
+		t.Fatalf("unexpected event count after restart: %d", len(store.events))
 	}
 }

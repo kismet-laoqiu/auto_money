@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"quantlab/internal/core"
@@ -55,6 +56,30 @@ func (event CandidateEvent) Symbol() string       { return event.SymbolValue }
 func (event CandidateEvent) EventTime() time.Time { return event.Ts }
 func (event CandidateEvent) Kind() string         { return "candidate.created" }
 
+type EntryIntentEvent struct {
+	EventIDValue string    `json:"event_id"`
+	SymbolValue  string    `json:"symbol"`
+	Interval     string    `json:"interval"`
+	Ts           time.Time `json:"ts"`
+	Side         core.Side `json:"side"`
+	Score        float64   `json:"score"`
+	Entry        float64   `json:"entry"`
+	Stop         float64   `json:"stop"`
+	Target       float64   `json:"target"`
+	Reasons      []string  `json:"reasons,omitempty"`
+	ProductType  string    `json:"product_type"`
+	MarginMode   string    `json:"margin_mode"`
+	MarginCoin   string    `json:"margin_coin"`
+	Size         string    `json:"size"`
+	Leverage     string    `json:"leverage"`
+	ClientOID    string    `json:"client_oid"`
+}
+
+func (event EntryIntentEvent) EventID() string      { return event.EventIDValue }
+func (event EntryIntentEvent) Symbol() string       { return event.SymbolValue }
+func (event EntryIntentEvent) EventTime() time.Time { return event.Ts }
+func (event EntryIntentEvent) Kind() string         { return "entry.intent.created" }
+
 type RiskEvent struct {
 	EventIDValue string      `json:"event_id"`
 	SymbolValue  string      `json:"symbol"`
@@ -82,6 +107,37 @@ func BuildCandidateEvent(candidate Candidate) CandidateEvent {
 		Target:       candidate.Target,
 		Reasons:      append([]string(nil), candidate.Reasons...),
 	}
+}
+
+func BuildEntryIntentEvent(runID string, leverage int, candidate Candidate) EntryIntentEvent {
+	if leverage <= 0 {
+		leverage = 3
+	}
+	return EntryIntentEvent{
+		EventIDValue: fmt.Sprintf("intent:%s:%s:%d", candidate.Symbol, candidate.Interval, candidate.Ts.UnixNano()),
+		SymbolValue:  candidate.Symbol,
+		Interval:     candidate.Interval,
+		Ts:           candidate.Ts,
+		Side:         candidate.Side,
+		Score:        candidate.Score,
+		Entry:        candidate.Entry,
+		Stop:         candidate.Stop,
+		Target:       candidate.Target,
+		Reasons:      append([]string(nil), candidate.Reasons...),
+		ProductType:  "USDT-FUTURES",
+		MarginMode:   "isolated",
+		MarginCoin:   "USDT",
+		Size:         ComputeIntentSizeText(candidate.Entry),
+		Leverage:     strconv.Itoa(leverage),
+		ClientOID:    BuildClientOID(defaultRunID(runID), candidate.Symbol, 1, candidate.Ts.UnixMilli()),
+	}
+}
+
+func defaultRunID(runID string) string {
+	if runID == "" {
+		return "runtime"
+	}
+	return runID
 }
 
 func DecodeMarketEvent(env EventEnvelope) (market.MarketEvent, error) {

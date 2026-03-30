@@ -1,0 +1,19 @@
+[Unit]
+Description=QuantLab mcpd TCP bridge
+After=network-online.target quantlab-platformd.service
+Wants=network-online.target
+PartOf=platform.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
+EnvironmentFile=-/etc/quantlab/platform.env
+ExecStartPre=/usr/bin/mkdir -p /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/var/platform/logs
+ExecStart=/usr/bin/bash -lc 'exec socat TCP-LISTEN:18082,bind=127.0.0.1,reuseaddr,fork EXEC:"./bin/mcpd -config configs/demo-mstr-e2e.yaml -execd-path ./bin/execd -write-token ${PLATFORM_MCP_WRITE_TOKEN:-quantlab-mcp-write}",nofork >>var/platform/logs/mcpd.log 2>&1'
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+
+[Install]
+WantedBy=platform.target

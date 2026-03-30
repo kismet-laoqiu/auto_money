@@ -1,0 +1,7 @@
+max_leverage: 3
+margin_mode: isolated
+product_type: USDT-FUTURES
+symbols:
+  - symbol: MSTRUSDT
+    max_notional: 30
+    max_tranches: 1

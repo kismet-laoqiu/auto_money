@@ -1,0 +1,19 @@
+[Unit]
+Description=QuantLab notifierd
+After=network-online.target quantlab-platformd.service
+Wants=network-online.target
+PartOf=platform.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
+EnvironmentFile=-/etc/quantlab/platform.env
+ExecStartPre=/usr/bin/mkdir -p /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/var/platform/logs
+ExecStart=/usr/bin/bash -lc 'exec ./bin/notifierd -config configs/demo-mstr-e2e.yaml -health-addr 127.0.0.1:18081 >>var/platform/logs/notifierd.log 2>&1'
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+
+[Install]
+WantedBy=platform.target

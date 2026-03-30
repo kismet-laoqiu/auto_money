@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"quantlab/internal/core"
 	"quantlab/internal/market"
 )
 
@@ -20,9 +19,9 @@ type RuntimeConfig struct {
 	PollInterval  time.Duration
 	ObserveOnly   bool
 	RunID         string
+	MaxLeverage   int
 	Store         RuntimeStore
 	Engine        *Engine
-	Exchange      LiveExchange
 	Risk          *RiskEngine
 	Reconciler    *Reconciler
 }
@@ -56,6 +55,9 @@ func NewRuntime(cfg RuntimeConfig) *Runtime {
 	}
 	if cfg.Engine == nil {
 		cfg.Engine = NewEngine(Config{})
+	}
+	if cfg.MaxLeverage <= 0 {
+		cfg.MaxLeverage = 3
 	}
 	return &Runtime{
 		cfg:       cfg,
@@ -157,39 +159,39 @@ func (runtime *Runtime) emitCommand(ctx context.Context, command Command) error 
 		if err := runtime.appendEvent(ctx, BuildCandidateEvent(value)); err != nil {
 			return err
 		}
-		return runtime.maybeExecuteCandidate(value)
+		return runtime.maybeEmitEntryIntent(ctx, value)
 	default:
 		return nil
 	}
 }
 
-func (runtime *Runtime) maybeExecuteCandidate(candidate Candidate) error {
-	if runtime.cfg.Exchange == nil || runtime.cfg.ObserveOnly {
+func (runtime *Runtime) maybeEmitEntryIntent(ctx context.Context, candidate Candidate) error {
+	if runtime.cfg.ObserveOnly {
 		return nil
 	}
 	if runtime.engine.State().ArmingState != ArmingArmed {
 		return nil
 	}
+	intent := BuildEntryIntentEvent(runtime.cfg.RunID, runtime.cfg.MaxLeverage, candidate)
 	if runtime.cfg.Risk != nil {
 		runtime.cfg.Risk.UpdateState(runtime.engine.State())
 		verdict := runtime.cfg.Risk.Check(EntryIntent{
 			Symbol:   candidate.Symbol,
-			Notional: candidate.Entry * defaultEntryQtyValue,
+			Notional: candidate.Entry * parseIntentSize(intent.Size),
 		})
 		if !verdict.Allow {
 			return nil
 		}
 	}
-	request := BuildEntryRequest(runtime.cfg.RunID, candidate)
-	if err := runtime.cfg.Exchange.PlaceOrder(request); err != nil {
+	if err := runtime.appendEvent(ctx, intent); err != nil {
 		return err
 	}
 	runtime.positions[candidate.Symbol] = SymbolPosition{
 		Symbol:      candidate.Symbol,
-		Qty:         signedCandidateQty(candidate),
-		ProductType: request.ProductType,
-		MarginMode:  request.MarginMode,
-		MarginCoin:  request.MarginCoin,
+		Qty:         signedIntentQty(intent),
+		ProductType: intent.ProductType,
+		MarginMode:  intent.MarginMode,
+		MarginCoin:  intent.MarginCoin,
 	}
 	return nil
 }
@@ -213,7 +215,7 @@ func (runtime *Runtime) applyReconcileVerdict(ctx context.Context, event market.
 	state := runtime.engine.State()
 	from := state.ArmingState
 	state.ArmingState = verdict.NextArmingState
-	runtime.engine.Restore(state)
+		 runtime.engine.Restore(state)
 	return runtime.appendEvent(ctx, RiskEvent{
 		EventIDValue: fmt.Sprintf("risk:%s:%s:%d", event.SymbolValue, verdict.Reason, event.Ts.UnixNano()),
 		SymbolValue:  event.SymbolValue,
@@ -252,11 +254,4 @@ func shouldDowngrade(current, next ArmingState) bool {
 		ArmingHalted:   4,
 	}
 	return rank[next] > rank[current]
-}
-
-func signedCandidateQty(candidate Candidate) float64 {
-	if candidate.Side == core.Short {
-		return -defaultEntryQtyValue
-	}
-	return defaultEntryQtyValue
 }

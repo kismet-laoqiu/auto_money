@@ -64,6 +64,11 @@ type OrderDetail struct {
 	ReduceOnly bool
 }
 
+type SinglePositionSnapshot struct {
+	Qty  float64
+	Mode string
+}
+
 type LeverageSetting struct {
 	Symbol              string `json:"symbol"`
 	MarginCoin          string `json:"marginCoin"`
@@ -177,6 +182,45 @@ func (client *Client) FetchFuturesPositions(ctx context.Context, productType, ma
 		})
 	}
 	return events, nil
+}
+
+func (client *Client) FetchSinglePosition(ctx context.Context, symbol, productType, marginCoin string) (SinglePositionSnapshot, error) {
+	values := url.Values{}
+	values.Set("symbol", symbol)
+	values.Set("productType", productType)
+	if marginCoin != "" {
+		values.Set("marginCoin", marginCoin)
+	}
+	body, err := client.doPrivate(ctx, http.MethodGet, "/api/v2/mix/position/single-position?"+values.Encode(), nil)
+	if err != nil {
+		return SinglePositionSnapshot{}, err
+	}
+	var response struct {
+		Code string `json:"code"`
+		Msg  string `json:"msg"`
+		Data []struct {
+			HoldSide string `json:"holdSide"`
+			Total    string `json:"total"`
+			PosMode  string `json:"posMode"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return SinglePositionSnapshot{}, fmt.Errorf("decode single position: %w", err)
+	}
+	if response.Code != "" && response.Code != "00000" {
+		return SinglePositionSnapshot{}, fmt.Errorf("bitget single position code=%s msg=%s", response.Code, response.Msg)
+	}
+	if len(response.Data) == 0 {
+		return SinglePositionSnapshot{}, nil
+	}
+	qty, err := parseSignedPositionQty(response.Data[0].HoldSide, response.Data[0].Total)
+	if err != nil {
+		return SinglePositionSnapshot{}, err
+	}
+	return SinglePositionSnapshot{
+		Qty:  qty,
+		Mode: response.Data[0].PosMode,
+	}, nil
 }
 
 func (client *Client) SetLeverage(ctx context.Context, req SetLeverageRequest) (LeverageSetting, error) {

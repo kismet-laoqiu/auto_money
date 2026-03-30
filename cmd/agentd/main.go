@@ -2,104 +2,100 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
-	"os/signal"
-	"path/filepath"
-	"syscall"
+	"strings"
+	"time"
 
 	"quantlab/internal/agent"
-	"quantlab/internal/config"
-	sqlitepkg "quantlab/internal/store/sqlite"
-	"quantlab/internal/trader"
+	platformjobs "quantlab/internal/platform/jobs"
+	"quantlab/internal/strategybundle"
 )
 
+type researchRunner interface {
+	Run(ctx context.Context, request platformjobs.Request) (platformjobs.Result, error)
+}
+
 func main() {
-	fs := flag.NewFlagSet("agentd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-bitget.yaml", "config file")
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	if !cfg.Live.Enabled {
-		fmt.Fprintln(os.Stderr, "live.enabled=false")
-		os.Exit(1)
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := run(ctx, cfg); err != nil && err != context.Canceled {
+	if err := runCompat(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func newService(cfg config.Config) (*agent.Service, error) {
-	if !cfg.Live.Agent.AdvisoryOnly {
-		return nil, fmt.Errorf("agentd requires live.agent.advisory_only=true")
-	}
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	baseURL := os.Getenv("OPENAI_BASE_URL")
-	client := agent.NewHTTPResponsesClient(agent.HTTPClientConfig{APIKey: apiKey, BaseURL: baseURL})
-	return agent.NewService(client, agent.Config{Store: true}), nil
-}
-
-func run(ctx context.Context, cfg config.Config) error {
-	if !cfg.Live.Agent.Enabled {
-		<-ctx.Done()
-		return ctx.Err()
-	}
-	service, err := newService(cfg)
-	if err != nil {
-		return err
-	}
-	store, err := sqlitepkg.NewStore(cfg.Live.Runtime.StateDBPath)
-	if err != nil {
-		return err
-	}
-	runtime := agent.NewRuntime(agent.RuntimeConfig{
-		Store:       runtimeStoreAdapter{store: store},
-		Service:     service,
-		MaxLeverage: cfg.Live.Risk.MaxLeverage,
-		ArtifactDir: filepath.Join(cfg.ArtifactDir, "agentd"),
+func runCompat(args []string) error {
+	fmt.Fprintln(os.Stderr, "agentd compatibility shell: forwarding advisory jobs to researchd")
+	client := agent.NewHTTPResponsesClient(agent.HTTPClientConfig{
+		APIKey:  os.Getenv("OPENAI_API_KEY"),
+		BaseURL: os.Getenv("OPENAI_BASE_URL"),
 	})
-	return runtime.Run(ctx)
+	service := agent.NewService(client, agent.Config{Store: true})
+	return runCompatWithRunner(args, platformjobs.NewResearchJob(platformjobs.Config{Service: service}))
 }
 
-type runtimeStoreAdapter struct {
-	store *sqlitepkg.Store
-}
-
-func (adapter runtimeStoreAdapter) ListEventsAfter(ctx context.Context, afterSeq int64, limit int, sources ...string) ([]trader.EventEnvelope, error) {
-	envelopes, err := adapter.store.ListEventsAfter(ctx, afterSeq, limit, sources...)
+func runCompatWithRunner(args []string, runner researchRunner) error {
+	if runner == nil {
+		return fmt.Errorf("research runner is nil")
+	}
+	fs := flag.NewFlagSet("agentd", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	configPath := fs.String("config", "configs/demo-bitget.yaml", "config file")
+	kind := fs.String("kind", string(platformjobs.KindNightlyReport), "research job kind")
+	strategyID := fs.String("strategy", "", "strategy id")
+	subject := fs.String("subject", "", "job subject")
+	body := fs.String("body", "", "job body override")
+	baselineRunID := fs.String("baseline-run", "", "baseline backtest run id")
+	candidateRunID := fs.String("candidate-run", "", "candidate backtest run id")
+	datasets := fs.String("datasets", "", "comma separated dataset descriptors")
+	artifactRoot := fs.String("artifact-root", "artifacts/platform/research", "artifact output root")
+	pollInterval := fs.Duration("poll-interval", 2*time.Second, "poll interval")
+	timeout := fs.Duration("timeout", 2*time.Minute, "overall timeout")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	_, bundle, err := strategybundle.LoadConfig(*configPath)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	out := make([]trader.EventEnvelope, 0, len(envelopes))
-	for _, env := range envelopes {
-		out = append(out, trader.EventEnvelope{
-			Seq:        env.Seq,
-			Source:     env.Source,
-			EventID:    env.EventID,
-			Symbol:     env.Symbol,
-			Kind:       env.Kind,
-			ExchangeTS: env.ExchangeTS,
-			ReceivedTS: env.ReceivedTS,
-			Payload:    append([]byte(nil), env.Payload...),
-		})
+	resolvedStrategyID := strings.TrimSpace(*strategyID)
+	if resolvedStrategyID == "" && bundle != nil {
+		resolvedStrategyID = bundle.StrategyID
 	}
-	return out, nil
+	result, err := runner.Run(context.Background(), platformjobs.Request{
+		Kind:           platformjobs.Kind(strings.TrimSpace(*kind)),
+		StrategyID:     resolvedStrategyID,
+		Subject:        strings.TrimSpace(*subject),
+		Body:           strings.TrimSpace(*body),
+		ConfigPath:     *configPath,
+		BaselineRunID:  strings.TrimSpace(*baselineRunID),
+		CandidateRunID: strings.TrimSpace(*candidateRunID),
+		Datasets:       splitCSV(*datasets),
+		ArtifactRoot:   *artifactRoot,
+		PollInterval:   *pollInterval,
+		Timeout:        *timeout,
+	})
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
 }
 
-func (adapter runtimeStoreAdapter) SaveConsumerCursor(ctx context.Context, consumer string, seq int64) error {
-	return adapter.store.SaveConsumerCursor(ctx, consumer, seq)
-}
-
-func (adapter runtimeStoreAdapter) LoadConsumerCursor(ctx context.Context, consumer string) (int64, error) {
-	return adapter.store.LoadConsumerCursor(ctx, consumer)
+func splitCSV(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }

@@ -1,0 +1,6 @@
+dsn: postgres://quantlab:quantlab@127.0.0.1:55432/quantlab?sslmode=disable
+max_open_conns: 8
+max_idle_conns: 4
+retention_days: 365
+compression_after_hours: 24
+health_timeout: 5s

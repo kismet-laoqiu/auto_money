@@ -1,0 +1,24 @@
+strategy_id: mstr-wave-fib
+version: v0.1.0
+description: Baseline MSTR wave and fib strategy bundle mirroring the current hardcoded runtime.
+objective:
+  risk_free_rate: 0.0
+  overfit_penalty_weight: 0.35
+  drawdown_weight: 2.0
+  calmar_weight: 0.35
+  pnl_weight: 0.2
+strategy:
+  fast_sma: 15
+  slow_sma: 60
+  pivot_window: 3
+  level_lookback: 90
+  level_tolerance: 0.012
+  fib_tolerance: 0.012
+  signal_threshold: 3.25
+  stop_atr: 1.0
+  reward_risk: 3.0
+  max_hold_bars: 20
+  cooldown_bars: 3
+  commission_bps: 2
+  slippage_bps: 3
+  atr_window: 14

@@ -13,6 +13,7 @@ import (
 	"quantlab/internal/exchange/bitget"
 	"quantlab/internal/market"
 	sqlitepkg "quantlab/internal/store/sqlite"
+	"quantlab/internal/strategybundle"
 )
 
 func main() {
@@ -22,7 +23,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	cfg, err := config.Load(*configPath)
+	cfg, _, err := strategybundle.LoadConfig(*configPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

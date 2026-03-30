@@ -1,0 +1,19 @@
+[Unit]
+Description=QuantLab execd
+After=network-online.target quantlab-traderd.service
+Wants=network-online.target
+PartOf=platform.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
+EnvironmentFile=-/etc/quantlab/platform.env
+ExecStartPre=/usr/bin/mkdir -p /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/var/platform/logs
+ExecStart=/usr/bin/bash -lc 'exec ./bin/execd -config configs/demo-mstr-e2e.yaml >>var/platform/logs/execd.log 2>&1'
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+
+[Install]
+WantedBy=platform.target

@@ -1,10 +1,6 @@
 package trader
 
-import (
-	"encoding/json"
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestBuildClientOIDStableAndShort(t *testing.T) {
 	got := BuildClientOID("run-17", "BTCUSDT", 2, 1710000000000)
@@ -16,19 +12,11 @@ func TestBuildClientOIDStableAndShort(t *testing.T) {
 	}
 }
 
-func TestExitOrderAlwaysReduceOnly(t *testing.T) {
-	req := BuildExitRequest(SymbolPosition{Symbol: "BTCUSDT", Qty: 0.02})
-	if req.ReduceOnly != "YES" {
-		t.Fatalf("exit request must be reduce-only: %+v", req)
+func TestComputeIntentSizeTextRoundsUpToMinNotional(t *testing.T) {
+	if got := ComputeIntentSizeText(125); got != "0.04" {
+		t.Fatalf("expected 0.04 at price 125, got %s", got)
 	}
-	if req.Side != "sell" || req.OrderType != "market" {
-		t.Fatalf("unexpected exit request shape: %+v", req)
-	}
-	body, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal exit request: %v", err)
-	}
-	if !strings.Contains(string(body), "\"reduceOnly\":\"YES\"") {
-		t.Fatalf("expected reduceOnly YES in json: %s", string(body))
+	if got := ComputeIntentSizeText(103); got != "0.05" {
+		t.Fatalf("expected 0.05 at price 103, got %s", got)
 	}
 }

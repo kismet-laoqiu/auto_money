@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"quantlab/internal/core"
-	"quantlab/internal/exchange/bitget"
 	"quantlab/internal/market"
 )
 
@@ -202,96 +201,6 @@ func TestRuntimeIgnoresDuplicateCandidateEventAfterRestart(t *testing.T) {
 	}
 }
 
-func TestRuntimeDoesNotPlaceOrdersInSafeMode(t *testing.T) {
-	ctx := context.Background()
-	store := newTestStore(t)
-	bar := market.BarClosedEvent{
-		EventIDValue: "bar-safe",
-		SymbolValue:  "MSTRUSDT",
-		Interval:     "1m",
-		Ts:           time.Unix(1710000120, 0).UTC(),
-		Close:        102,
-	}
-	raw, err := json.Marshal(bar)
-	if err != nil {
-		t.Fatalf("marshal bar: %v", err)
-	}
-	if _, err := store.AppendEvent(ctx, "market.public", bar, raw); err != nil {
-		t.Fatalf("append bar: %v", err)
-	}
-	exchange := &runtimeExchange{}
-	runtime := NewRuntime(RuntimeConfig{
-		ConsumerKey:   "traderd",
-		CheckpointKey: "trader.runtime",
-		Store:         store,
-		Engine: NewEngine(Config{
-			ArmingState: ArmingSafe,
-			Strategy:    &runtimeStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 102, Stop: 100, Target: 105, Reasons: []string{"runtime"}}},
-		}),
-		Sources:    []string{"market.public"},
-		Exchange:   exchange,
-		Risk:       NewRiskEngine(RiskConfig{MaxLeverage: 3}),
-		Reconciler: NewReconciler(),
-	})
-
-	if err := runtime.ProcessAvailable(ctx); err != nil {
-		t.Fatalf("process available: %v", err)
-	}
-	if exchange.placeCalls != 0 {
-		t.Fatalf("safe mode must not place orders")
-	}
-}
-
-func TestRuntimePlacesOrdersOnlyWhenArmedAndRiskPasses(t *testing.T) {
-	ctx := context.Background()
-	store := newTestStore(t)
-	bar := market.BarClosedEvent{
-		EventIDValue: "bar-armed",
-		SymbolValue:  "MSTRUSDT",
-		Interval:     "1m",
-		Ts:           time.Unix(1710000180, 0).UTC(),
-		Close:        103,
-	}
-	raw, err := json.Marshal(bar)
-	if err != nil {
-		t.Fatalf("marshal bar: %v", err)
-	}
-	if _, err := store.AppendEvent(ctx, "market.public", bar, raw); err != nil {
-		t.Fatalf("append bar: %v", err)
-	}
-	exchange := &runtimeExchange{}
-	runtime := NewRuntime(RuntimeConfig{
-		ConsumerKey:   "traderd",
-		CheckpointKey: "trader.runtime",
-		Store:         store,
-		Engine: NewEngine(Config{
-			ArmingState: ArmingArmed,
-			Strategy:    &runtimeStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 103, Stop: 101, Target: 106, Reasons: []string{"runtime"}}},
-		}),
-		Sources:    []string{"market.public"},
-		Exchange:   exchange,
-		Risk:       NewRiskEngine(RiskConfig{MaxLeverage: 3}),
-		Reconciler: NewReconciler(),
-		RunID:      "run-17",
-	})
-
-	if err := runtime.ProcessAvailable(ctx); err != nil {
-		t.Fatalf("process available: %v", err)
-	}
-	if exchange.placeCalls != 1 {
-		t.Fatalf("expected one place call, got %d", exchange.placeCalls)
-	}
-	if exchange.lastReq.Symbol != "MSTRUSDT" || exchange.lastReq.ProductType != "USDT-FUTURES" {
-		t.Fatalf("unexpected entry request: %+v", exchange.lastReq)
-	}
-	if exchange.lastReq.MarginMode != "isolated" || exchange.lastReq.MarginCoin != "USDT" {
-		t.Fatalf("unexpected margin template: %+v", exchange.lastReq)
-	}
-	if exchange.lastReq.Side != "buy" || exchange.lastReq.TradeSide != "open" || exchange.lastReq.OrderType != "market" || exchange.lastReq.Size != "0.01" {
-		t.Fatalf("unexpected execution request: %+v", exchange.lastReq)
-	}
-}
-
 func TestRuntimeDowngradesOnPositionMismatch(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t)
@@ -310,7 +219,6 @@ func TestRuntimeDowngradesOnPositionMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("append bar: %v", err)
 	}
-	exchange := &runtimeExchange{}
 	runtime := NewRuntime(RuntimeConfig{
 		ConsumerKey:   "traderd",
 		CheckpointKey: "trader.runtime",
@@ -320,7 +228,6 @@ func TestRuntimeDowngradesOnPositionMismatch(t *testing.T) {
 			Strategy:    &runtimeStrategy{signal: core.Signal{Side: core.Long, Score: 4.2, Entry: 104, Stop: 102, Target: 107, Reasons: []string{"runtime"}}},
 		}),
 		Sources:    []string{"market.public", "market.private"},
-		Exchange:   exchange,
 		Risk:       NewRiskEngine(RiskConfig{MaxLeverage: 3}),
 		Reconciler: NewReconciler(),
 		RunID:      "run-17",
@@ -377,16 +284,7 @@ func (strategy *runtimeStrategy) OnBar(symbol, interval string, bars []core.Bar)
 	return strategy.signal
 }
 
-type runtimeExchange struct {
-	placeCalls int
-	lastReq    bitget.PlaceOrderRequest
-}
 
-func (exchange *runtimeExchange) PlaceOrder(req bitget.PlaceOrderRequest) error {
-	exchange.placeCalls++
-	exchange.lastReq = req
-	return nil
-}
 
 type memoryRuntimeStore struct {
 	nextSeq     int64

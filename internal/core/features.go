@@ -6,6 +6,8 @@ import (
 	"quantlab/internal/config"
 )
 
+const FeatureSetVersion = "feature-set.v1"
+
 type WaveStructureFeatures struct {
 	WaveUpScore           float64 `json:"wave_up_score"`
 	WaveDownScore         float64 `json:"wave_down_score"`

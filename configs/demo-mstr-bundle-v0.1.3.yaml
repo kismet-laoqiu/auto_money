@@ -1,0 +1,21 @@
+cache_dir: data
+artifact_dir: artifacts/mstr-bundle-v0.1.3
+strategy_bundle_path: ../strategies/mstr-wave-fib/versions/v0.1.3
+live:
+  enabled: true
+  runtime:
+    arming_state: safe
+    state_db_path: var/mstr-bundle-v0.1.3-state.db
+    observe_only: true
+  exchange:
+    venue: bitget
+    rest_base_url: https://api.bitget.com
+    public_ws_url: wss://ws.bitget.com/v2/ws/public
+    private_ws_url: wss://ws.bitget.com/v2/ws/private
+    api_key_env: BITGET_API_KEY
+    api_secret_env: BITGET_API_SECRET
+    passphrase_env: BITGET_PASSPHRASE
+    position_mode: one_way_mode
+  agent:
+    enabled: false
+    advisory_only: true

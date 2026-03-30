@@ -1,0 +1,20 @@
+services:
+  warehouse-db:
+    image: timescale/timescaledb:latest-pg17
+    container_name: quantlab-warehouse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quantlab
+      POSTGRES_USER: quantlab
+      POSTGRES_PASSWORD: quantlab
+      TIMESCALEDB_TELEMETRY: "off"
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - ./var/platform/warehouse/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantlab -d quantlab"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s

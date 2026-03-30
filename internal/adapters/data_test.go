@@ -2,13 +2,48 @@ package adapters
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"quantlab/internal/config"
+	"quantlab/internal/core"
 )
+
+func TestEnsureDatasetUsesCachedBarsWithoutFetch(t *testing.T) {
+	cacheDir := t.TempDir()
+	spec := config.DatasetConfig{
+		Name:     "cached",
+		Provider: "bitget",
+		Symbol:   "MSTRUSDT",
+		Interval: "1m",
+	}
+	bars := []core.Bar{{
+		Time:   time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC),
+		Open:   1,
+		High:   2,
+		Low:    0.5,
+		Close:  1.5,
+		Volume: 10,
+	}}
+	if err := writeBarsCSV(datasetCachePath(cacheDir, spec), bars); err != nil {
+		t.Fatalf("write bars cache: %v", err)
+	}
+	client := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return nil, errors.New("unexpected remote fetch")
+	})}}
+	dataset, err := client.EnsureDataset(context.Background(), cacheDir, spec, false)
+	if err != nil {
+		t.Fatalf("ensure dataset from cache: %v", err)
+	}
+	if len(dataset.Bars) != 1 || dataset.Bars[0].Close != 1.5 {
+		t.Fatalf("unexpected dataset bars: %+v", dataset.Bars)
+	}
+}
 
 func TestFetchBitgetUsesFuturesCandlesPathWhenProductTypeSet(t *testing.T) {
 	var requestedURL string
@@ -33,6 +68,13 @@ func TestFetchBitgetUsesFuturesCandlesPathWhenProductTypeSet(t *testing.T) {
 	if !strings.Contains(requestedURL, "/api/v2/mix/market/candles") || !strings.Contains(requestedURL, "productType=USDT-FUTURES") {
 		t.Fatalf("unexpected futures request url: %s", requestedURL)
 	}
+	parsedURL, err := url.Parse(requestedURL)
+	if err != nil {
+		t.Fatalf("parse requested url: %v", err)
+	}
+	if granularity := parsedURL.Query().Get("granularity"); granularity != "1m" {
+		t.Fatalf("unexpected futures granularity %q in request url: %s", granularity, requestedURL)
+	}
 }
 
 func TestFetchBitgetUsesSpotPathWithoutProductType(t *testing.T) {
@@ -56,6 +98,13 @@ func TestFetchBitgetUsesSpotPathWithoutProductType(t *testing.T) {
 	}
 	if !strings.Contains(requestedURL, "/api/v2/spot/market/candles") {
 		t.Fatalf("unexpected spot request url: %s", requestedURL)
+	}
+	parsedURL, err := url.Parse(requestedURL)
+	if err != nil {
+		t.Fatalf("parse requested url: %v", err)
+	}
+	if granularity := parsedURL.Query().Get("granularity"); granularity != "1min" {
+		t.Fatalf("unexpected spot granularity %q in request url: %s", granularity, requestedURL)
 	}
 }
 

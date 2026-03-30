@@ -1,0 +1,12 @@
+[Unit]
+Description=QuantLab researchd (%i)
+After=network-online.target quantlab-platformd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
+EnvironmentFile=-/etc/quantlab/platform.env
+EnvironmentFile=/etc/quantlab/researchd/%i.env
+ExecStartPre=/usr/bin/mkdir -p /etc/quantlab/researchd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/var/platform/logs
+ExecStart=/usr/bin/bash -lc 'exec ./bin/researchd ${RESEARCHD_ARGS:?RESEARCHD_ARGS is required} >>var/platform/logs/researchd-%i.log 2>&1'
