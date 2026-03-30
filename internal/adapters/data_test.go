@@ -77,6 +77,32 @@ func TestFetchBitgetUsesFuturesCandlesPathWhenProductTypeSet(t *testing.T) {
 	}
 }
 
+func TestBitgetMixEndpointOmitsStartTimeForLongHistoryWindow(t *testing.T) {
+	spec := config.DatasetConfig{
+		Symbol:      "BTCUSDT",
+		ProductType: "USDT-FUTURES",
+		StartTime:   time.Date(2023, 3, 30, 0, 0, 0, 0, time.UTC),
+		EndTime:     time.Date(2026, 3, 30, 0, 0, 0, 0, time.UTC),
+	}
+	endpoint := bitgetMixEndpoint(spec, "15m", 500)
+	if !strings.Contains(endpoint, "/api/v2/mix/market/history-candles") {
+		t.Fatalf("expected history endpoint, got %s", endpoint)
+	}
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		t.Fatalf("parse endpoint: %v", err)
+	}
+	if parsedURL.Query().Get("startTime") != "" {
+		t.Fatalf("expected startTime omitted for long history window, got %s", endpoint)
+	}
+	if parsedURL.Query().Get("endTime") == "" {
+		t.Fatalf("expected endTime in endpoint, got %s", endpoint)
+	}
+	if parsedURL.Query().Get("limit") != "200" {
+		t.Fatalf("expected limit=200 in endpoint, got %s", endpoint)
+	}
+}
+
 func TestFetchBitgetUsesSpotPathWithoutProductType(t *testing.T) {
 	var requestedURL string
 	client := &Client{httpClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {

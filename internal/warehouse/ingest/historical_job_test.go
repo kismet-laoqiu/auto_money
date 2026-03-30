@@ -57,6 +57,18 @@ func TestHistoricalJobSyncUsesDefaultIntervalsAndWritesArtifacts(t *testing.T) {
 	}
 }
 
+func TestDefaultIntervalsIncludeWeekly(t *testing.T) {
+	found := false
+	for _, interval := range DefaultIntervals {
+		if interval == "1w" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected 1w in default intervals")
+	}
+}
+
 func TestHistoricalJobSyncCapturesRequestMetadata(t *testing.T) {
 	fetcher := &fetcherStub{bars: sampleBars()}
 	store := &storeStub{}
@@ -87,6 +99,57 @@ func TestHistoricalJobSyncCapturesRequestMetadata(t *testing.T) {
 	}
 }
 
+func TestHistoricalJobSyncBackfillsUntilHorizon(t *testing.T) {
+	pageOne := []core.Bar{
+		{Time: time.Date(2025, 9, 29, 0, 0, 0, 0, time.UTC), Close: 1},
+		{Time: time.Date(2026, 3, 28, 0, 0, 0, 0, time.UTC), Close: 2},
+	}
+	pageTwo := []core.Bar{
+		{Time: time.Date(2025, 3, 29, 0, 0, 0, 0, time.UTC), Close: 3},
+		{Time: time.Date(2025, 6, 29, 0, 0, 0, 0, time.UTC), Close: 4},
+	}
+	fetcher := &pagedFetcherStub{pages: [][]core.Bar{pageOne, pageTwo}}
+	store := &recordingStoreStub{}
+	job := NewHistoricalJob(JobConfig{
+		Fetcher: fetcher,
+		Store:   store,
+		Now: func() time.Time {
+			return time.Date(2026, 3, 29, 0, 0, 0, 0, time.UTC)
+		},
+	})
+
+	result, err := job.Sync(context.Background(), Request{
+		Provider:     "bitget",
+		ProductType:  "USDT-FUTURES",
+		Symbols:      []string{"BTCUSDT"},
+		Intervals:    []string{"1d"},
+		Limit:        2,
+		HorizonDays:  365,
+		ArtifactRoot: t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("sync historical: %v", err)
+	}
+	if len(fetcher.specs) != 2 {
+		t.Fatalf("unexpected fetch count: %d", len(fetcher.specs))
+	}
+	if !fetcher.specs[0].StartTime.Equal(time.Date(2025, 3, 29, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("unexpected start time: %s", fetcher.specs[0].StartTime)
+	}
+	if !fetcher.specs[1].EndTime.Before(pageOne[0].Time) {
+		t.Fatalf("expected second page cursor before first page earliest, got %s", fetcher.specs[1].EndTime)
+	}
+	if len(store.lastBars) != 4 {
+		t.Fatalf("unexpected stored bars: %+v", store.lastBars)
+	}
+	if store.lastBars[0].Time != pageTwo[0].Time || store.lastBars[1].Time != pageTwo[1].Time || store.lastBars[2].Time != pageOne[0].Time || store.lastBars[3].Time != pageOne[1].Time {
+		t.Fatalf("unexpected stored bars order: %+v", store.lastBars)
+	}
+	if len(result.Datasets) != 1 || result.Datasets[0].RowCount != 4 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 type fetcherStub struct {
 	specs []config.DatasetConfig
 	bars  []core.Bar
@@ -114,4 +177,32 @@ func sampleBars() []core.Bar {
 		{Time: start.Add(time.Minute), Open: 1.5, High: 2.5, Low: 1, Close: 2, Volume: 12},
 		{Time: start.Add(2 * time.Minute), Open: 2, High: 3, Low: 1.5, Close: 2.5, Volume: 15},
 	}
+}
+
+type pagedFetcherStub struct {
+	specs []config.DatasetConfig
+	pages [][]core.Bar
+}
+
+func (stub *pagedFetcherStub) FetchBars(_ context.Context, spec config.DatasetConfig) ([]core.Bar, error) {
+	stub.specs = append(stub.specs, spec)
+	if len(stub.pages) == 0 {
+		return nil, nil
+	}
+	page := stub.pages[0]
+	stub.pages = stub.pages[1:]
+	return append([]core.Bar(nil), page...), nil
+}
+
+type recordingStoreStub struct {
+	lastBars []core.Bar
+}
+
+func (store *recordingStoreStub) UpsertBars(_ context.Context, _ config.DatasetConfig, bars []core.Bar) (int, error) {
+	store.lastBars = append([]core.Bar(nil), bars...)
+	return len(bars), nil
+}
+
+func (store *recordingStoreStub) CountBars(_ context.Context, _ config.DatasetConfig) (int, error) {
+	return len(store.lastBars), nil
 }

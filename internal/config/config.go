@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -11,6 +12,7 @@ type Config struct {
 	CacheDir           string          `yaml:"cache_dir"`
 	ArtifactDir        string          `yaml:"artifact_dir"`
 	StrategyBundlePath string          `yaml:"strategy_bundle_path"`
+	WatchlistPath      string          `yaml:"watchlist_path"`
 	Objective          ObjectiveConfig `yaml:"objective"`
 	Strategy           StrategyConfig  `yaml:"strategy"`
 	Datasets           []DatasetConfig `yaml:"datasets"`
@@ -45,13 +47,15 @@ type StrategyConfig struct {
 }
 
 type DatasetConfig struct {
-	Name        string `yaml:"name"`
-	Provider    string `yaml:"provider"`
-	Symbol      string `yaml:"symbol"`
-	Interval    string `yaml:"interval"`
-	Range       string `yaml:"range"`
-	Limit       int    `yaml:"limit"`
-	ProductType string `yaml:"product_type"`
+	Name        string    `yaml:"name"`
+	Provider    string    `yaml:"provider"`
+	Symbol      string    `yaml:"symbol"`
+	Interval    string    `yaml:"interval"`
+	Range       string    `yaml:"range"`
+	Limit       int       `yaml:"limit"`
+	ProductType string    `yaml:"product_type"`
+	StartTime   time.Time `yaml:"-"`
+	EndTime     time.Time `yaml:"-"`
 }
 
 type StreamConfig struct {

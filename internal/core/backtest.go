@@ -336,6 +336,8 @@ func periodsPerYear(interval string) float64 {
 		return 365 * 6
 	case "1d":
 		return 252
+	case "1w":
+		return 52
 	default:
 		return 252
 	}

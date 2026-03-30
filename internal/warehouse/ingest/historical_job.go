@@ -15,7 +15,7 @@ import (
 	"quantlab/internal/core"
 )
 
-var DefaultIntervals = []string{"1m", "5m", "15m", "1h", "4h", "1d"}
+var DefaultIntervals = []string{"1m", "5m", "15m", "1h", "4h", "1d", "1w"}
 
 type Fetcher interface {
 	FetchBars(ctx context.Context, spec config.DatasetConfig) ([]core.Bar, error)
@@ -42,6 +42,7 @@ type Request struct {
 	Symbols      []string `json:"symbols"`
 	Intervals    []string `json:"intervals"`
 	Limit        int      `json:"limit"`
+	HorizonDays  int      `json:"horizon_days"`
 	ArtifactRoot string   `json:"artifact_root"`
 }
 
@@ -97,6 +98,7 @@ func (job *HistoricalJob) Sync(ctx context.Context, request Request) (SyncResult
 			Symbols:      append([]string(nil), request.Symbols...),
 			Intervals:    append([]string(nil), normalizedIntervals...),
 			Limit:        request.Limit,
+			HorizonDays:  request.HorizonDays,
 			ArtifactRoot: request.ArtifactRoot,
 		},
 		Datasets: make([]DatasetReport, 0, len(request.Symbols)*len(normalizedIntervals)),
@@ -111,7 +113,7 @@ func (job *HistoricalJob) Sync(ctx context.Context, request Request) (SyncResult
 				Limit:       request.Limit,
 				ProductType: request.ProductType,
 			}
-			bars, err := job.cfg.Fetcher.FetchBars(ctx, spec)
+			bars, err := job.fetchBars(ctx, spec, generatedAt, request.HorizonDays)
 			if err != nil {
 				return SyncResult{}, err
 			}
@@ -138,6 +140,46 @@ func (job *HistoricalJob) Sync(ctx context.Context, request Request) (SyncResult
 		return SyncResult{}, err
 	}
 	return result, nil
+}
+
+func (job *HistoricalJob) fetchBars(ctx context.Context, spec config.DatasetConfig, generatedAt time.Time, horizonDays int) ([]core.Bar, error) {
+	if horizonDays <= 0 {
+		return job.cfg.Fetcher.FetchBars(ctx, spec)
+	}
+	horizonStart := generatedAt.AddDate(0, 0, -horizonDays)
+	cursor := generatedAt
+	seen := map[int64]bool{}
+	bars := make([]core.Bar, 0, max(spec.Limit, 256))
+	for {
+		pageSpec := spec
+		pageSpec.StartTime = horizonStart
+		pageSpec.EndTime = cursor
+		page, err := job.cfg.Fetcher.FetchBars(ctx, pageSpec)
+		if err != nil {
+			return nil, err
+		}
+		if len(page) == 0 {
+			break
+		}
+		for _, bar := range page {
+			if bar.Time.Before(horizonStart) {
+				continue
+			}
+			ts := bar.Time.UTC().UnixMilli()
+			if seen[ts] {
+				continue
+			}
+			seen[ts] = true
+			bars = append(bars, bar)
+		}
+		earliest := page[0].Time.UTC()
+		if !earliest.After(horizonStart) {
+			break
+		}
+		cursor = earliest.Add(-time.Millisecond)
+	}
+	sortBars(bars)
+	return bars, nil
 }
 
 func writeArtifacts(result SyncResult) error {
@@ -222,7 +264,24 @@ func intervalDuration(interval string) (time.Duration, bool) {
 		return 4 * time.Hour, true
 	case "1d":
 		return 24 * time.Hour, true
+	case "1w":
+		return 7 * 24 * time.Hour, true
 	default:
 		return 0, false
 	}
+}
+
+func sortBars(bars []core.Bar) {
+	for i := 1; i < len(bars); i++ {
+		for j := i; j > 0 && bars[j].Time.Before(bars[j-1].Time); j-- {
+			bars[j], bars[j-1] = bars[j-1], bars[j]
+		}
+	}
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

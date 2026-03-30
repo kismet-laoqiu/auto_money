@@ -1,6 +1,7 @@
 package strategybundle
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -96,5 +97,34 @@ func TestLoadConfigResolvesDemoBundleConfig(t *testing.T) {
 	}
 	if resolved.Live.Risk.MaxLeverage != 3 {
 		t.Fatalf("unexpected leverage: %d", resolved.Live.Risk.MaxLeverage)
+	}
+}
+
+func TestLoadConfigOverlaysWatchlistSymbolsIntoLiveAndStream(t *testing.T) {
+	dir := t.TempDir()
+	watchlistPath := filepath.Join(dir, "watchlist.yaml")
+	if err := os.WriteFile(watchlistPath, []byte("symbols:\n  - symbol: BTCUSDT\n    max_notional: 500\n    max_tranches: 4\n  - symbol: ETHUSDT\n    max_notional: 500\n    max_tranches: 4\n"), 0o644); err != nil {
+		t.Fatalf("write watchlist: %v", err)
+	}
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("watchlist_path: watchlist.yaml\nlive:\n  enabled: true\n"), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	resolved, bundle, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if bundle != nil {
+		t.Fatalf("unexpected bundle: %+v", bundle)
+	}
+	if len(resolved.Live.Exchange.Symbols) != 2 || resolved.Live.Exchange.Symbols[0].Symbol != "BTCUSDT" || resolved.Live.Exchange.Symbols[1].Symbol != "ETHUSDT" {
+		t.Fatalf("unexpected live symbols: %+v", resolved.Live.Exchange.Symbols)
+	}
+	if len(resolved.Stream.Symbols) != 2 || resolved.Stream.Symbols[0] != "BTCUSDT" || resolved.Stream.Symbols[1] != "ETHUSDT" {
+		t.Fatalf("unexpected stream symbols: %+v", resolved.Stream.Symbols)
+	}
+	if resolved.Stream.Interval != "1m" {
+		t.Fatalf("unexpected stream interval: %s", resolved.Stream.Interval)
 	}
 }

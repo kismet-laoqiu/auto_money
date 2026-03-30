@@ -1,3 +1,4 @@
+watchlist_path: platform/watchlist.yaml
 live:
   enabled: true
   exchange:

@@ -17,9 +17,11 @@ import (
 	"quantlab/internal/agent"
 	platformjobs "quantlab/internal/platform/jobs"
 	"quantlab/internal/platform/notifier"
+	"quantlab/internal/strategybundle"
 	"quantlab/internal/warehouse/catalog"
 	warehouseexport "quantlab/internal/warehouse/export"
 	"quantlab/internal/warehouse/ingest"
+	"quantlab/internal/watchlist"
 )
 
 type warehouseConfig = catalog.Config
@@ -29,6 +31,8 @@ type warehouseHealthStatus = catalog.HealthStatus
 var loadWarehouseConfig = catalog.LoadConfig
 var runWarehouseMigrate = catalog.Migrate
 var runWarehouseHealth = catalog.Health
+var loadWatchlistFile = watchlist.Load
+var loadRuntimeConfig = strategybundle.LoadConfig
 
 var defaultHistoricalSymbols = []string{
 	"BTCUSDT",
@@ -61,6 +65,14 @@ type exportResult = warehouseexport.ExportResult
 
 type researchRequest = platformjobs.Request
 type researchResult = platformjobs.Result
+
+type watchlistApplyResult struct {
+	WatchlistPath   string               `json:"watchlist_path"`
+	LiveConfigPath  string               `json:"live_config_path"`
+	LiveSymbols     []string             `json:"live_symbols"`
+	Historical      historicalSyncResult `json:"historical"`
+	ResolvedProduct string               `json:"resolved_product_type"`
+}
 
 var platformctlNow = time.Now
 
@@ -137,6 +149,8 @@ func main() {
 		err = runResearch(os.Args[2:])
 	case "historical":
 		err = runHistorical(os.Args[2:])
+	case "watchlist":
+		err = runWatchlist(os.Args[2:])
 	case "aggregate":
 		err = runAggregate(os.Args[2:])
 	case "export":
@@ -162,7 +176,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: platformctl <status|positions|orders|events|backtest|research|historical|aggregate|export|strategy|promotion|live|notify|warehouse> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: platformctl <status|positions|orders|events|backtest|research|historical|watchlist|aggregate|export|strategy|promotion|live|notify|warehouse> [flags]")
 }
 
 func runAPI(args []string, path string) error {
@@ -379,11 +393,13 @@ func runHistorical(args []string) error {
 	}
 	fs := flag.NewFlagSet("historical sync", flag.ContinueOnError)
 	warehouseConfigPath := fs.String("warehouse-config", "configs/platform/warehouse.yaml", "warehouse config path")
+	watchlistPath := fs.String("watchlist", "configs/platform/watchlist.yaml", "watchlist file path")
 	provider := fs.String("provider", "bitget", "market data provider")
 	productType := fs.String("product-type", "", "product type for provider-specific endpoints")
 	symbols := fs.String("symbols", "", "comma separated symbols")
 	intervals := fs.String("intervals", "", "comma separated intervals")
 	limit := fs.Int("limit", 1000, "bars per request")
+	horizonDays := fs.Int("horizon-days", 0, "historical backfill horizon in days")
 	artifactRoot := fs.String("artifact-root", "artifacts/platform/historical-sync", "artifact output root")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -395,13 +411,67 @@ func runHistorical(args []string) error {
 	result, err := runHistoricalSync(context.Background(), cfg, historicalRequest{
 		Provider:     *provider,
 		ProductType:  *productType,
-		Symbols:      historicalSymbols(*symbols),
+		Symbols:      historicalSymbols(*symbols, *watchlistPath),
 		Intervals:    splitCSV(*intervals),
 		Limit:        *limit,
+		HorizonDays:  *horizonDays,
 		ArtifactRoot: *artifactRoot,
 	})
 	if err != nil {
 		return err
+	}
+	return printJSON(result)
+}
+
+func runWatchlist(args []string) error {
+	if len(args) == 0 || args[0] != "apply" {
+		return fmt.Errorf("usage: platformctl watchlist apply [flags]")
+	}
+	fs := flag.NewFlagSet("watchlist apply", flag.ContinueOnError)
+	watchlistPath := fs.String("watchlist", "configs/platform/watchlist.yaml", "watchlist file path")
+	liveConfigPath := fs.String("live-config", "configs/live-bitget.yaml", "live config file path")
+	warehouseConfigPath := fs.String("warehouse-config", "configs/platform/warehouse.yaml", "warehouse config path")
+	limit := fs.Int("limit", 200, "bars per request")
+	artifactRoot := fs.String("artifact-root", "artifacts/platform/historical-sync", "artifact output root")
+	if err := fs.Parse(args[1:]); err != nil {
+		return err
+	}
+	file, err := loadWatchlistFile(*watchlistPath)
+	if err != nil {
+		return err
+	}
+	cfg, err := loadWarehouseConfig(*warehouseConfigPath)
+	if err != nil {
+		return err
+	}
+	historical, err := runHistoricalSync(context.Background(), cfg, historicalRequest{
+		Provider:     file.Provider,
+		ProductType:  file.ProductType,
+		Symbols:      file.SymbolNames(),
+		Intervals:    append([]string(nil), file.HistoricalIntervals...),
+		Limit:        *limit,
+		HorizonDays:  file.HorizonDays,
+		ArtifactRoot: *artifactRoot,
+	})
+	if err != nil {
+		return err
+	}
+	resolved, _, err := loadRuntimeConfig(*liveConfigPath)
+	if err != nil {
+		return err
+	}
+	result := watchlistApplyResult{
+		WatchlistPath:   *watchlistPath,
+		LiveConfigPath:  *liveConfigPath,
+		LiveSymbols:     make([]string, 0, len(resolved.Live.Exchange.Symbols)),
+		Historical:      historical,
+		ResolvedProduct: resolved.Live.Exchange.ProductType,
+	}
+	for _, item := range resolved.Live.Exchange.Symbols {
+		if item.Symbol == "" {
+			continue
+		}
+		result.LiveSymbols = append(result.LiveSymbols, item.Symbol)
 	}
 	return printJSON(result)
 }
@@ -578,10 +648,19 @@ func runJSONRequest(method, target string, body any) error {
 	return encoder.Encode(payload)
 }
 
-func historicalSymbols(value string) []string {
+func historicalSymbols(value, watchlistPath string) []string {
 	symbols := splitCSV(value)
 	if len(symbols) > 0 {
 		return symbols
+	}
+	if watchlistPath != "" {
+		file, err := loadWatchlistFile(watchlistPath)
+		if err == nil {
+			symbols = file.SymbolNames()
+			if len(symbols) > 0 {
+				return symbols
+			}
+		}
 	}
 	return append([]string(nil), defaultHistoricalSymbols...)
 }

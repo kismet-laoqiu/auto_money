@@ -86,13 +86,7 @@ func (client *Client) fetchBitget(ctx context.Context, spec config.DatasetConfig
 	endpoint := fmt.Sprintf("https://api.bitget.com/api/v2/spot/market/candles?symbol=%s&granularity=%s&limit=%d", url.QueryEscape(strings.ToUpper(spec.Symbol)), url.QueryEscape(granularity), limit)
 	if spec.ProductType != "" {
 		granularity = bitgetMixGranularity(spec.Interval)
-		endpoint = fmt.Sprintf(
-			"https://api.bitget.com/api/v2/mix/market/candles?symbol=%s&productType=%s&granularity=%s&limit=%d",
-			url.QueryEscape(strings.ToUpper(spec.Symbol)),
-			url.QueryEscape(spec.ProductType),
-			url.QueryEscape(granularity),
-			limit,
-		)
+		endpoint = bitgetMixEndpoint(spec, granularity, limit)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -102,13 +96,39 @@ func (client *Client) fetchBitget(ctx context.Context, spec config.DatasetConfig
 	if err != nil {
 		return nil, err
 	}
+	return decodeBitgetBars(spec.Symbol, body)
+}
+
+func bitgetMixEndpoint(spec config.DatasetConfig, granularity string, limit int) string {
+	params := url.Values{}
+	params.Set("symbol", strings.ToUpper(spec.Symbol))
+	params.Set("productType", spec.ProductType)
+	params.Set("granularity", granularity)
+	if !spec.StartTime.IsZero() || !spec.EndTime.IsZero() {
+		if limit <= 0 || limit > 200 {
+			limit = 200
+		}
+		params.Set("limit", strconv.Itoa(limit))
+		if !spec.StartTime.IsZero() && (spec.EndTime.IsZero() || spec.EndTime.Sub(spec.StartTime) <= 90*24*time.Hour) {
+			params.Set("startTime", strconv.FormatInt(spec.StartTime.UTC().UnixMilli(), 10))
+		}
+		if !spec.EndTime.IsZero() {
+			params.Set("endTime", strconv.FormatInt(spec.EndTime.UTC().UnixMilli(), 10))
+		}
+		return "https://api.bitget.com/api/v2/mix/market/history-candles?" + params.Encode()
+	}
+	params.Set("limit", strconv.Itoa(limit))
+	return "https://api.bitget.com/api/v2/mix/market/candles?" + params.Encode()
+}
+
+func decodeBitgetBars(symbol string, body []byte) ([]core.Bar, error) {
 	var payload struct {
 		Code string          `json:"code"`
 		Msg  string          `json:"msg"`
 		Data [][]interface{} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("decode bitget %s: %w", spec.Symbol, err)
+		return nil, fmt.Errorf("decode bitget %s: %w", symbol, err)
 	}
 	bars := make([]core.Bar, 0, len(payload.Data))
 	for _, row := range payload.Data {
@@ -278,6 +298,8 @@ func bitgetMixGranularity(interval string) string {
 		return "4H"
 	case "1d":
 		return "1D"
+	case "1w":
+		return "1W"
 	default:
 		return "1D"
 	}

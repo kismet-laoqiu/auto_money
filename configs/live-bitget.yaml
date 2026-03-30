@@ -1,5 +1,6 @@
 cache_dir: data
 artifact_dir: artifacts/live-bitget
+watchlist_path: platform/watchlist.yaml
 strategy:
   fast_sma: 15
   slow_sma: 60
@@ -39,10 +40,6 @@ live:
     passphrase_env: BITGET_PASSPHRASE
     margin_mode: isolated
     position_mode: one_way_mode
-    symbols:
-      - symbol: BTCUSDT
-        max_notional: 500
-        max_tranches: 4
   risk:
     max_leverage: 3
   agent:

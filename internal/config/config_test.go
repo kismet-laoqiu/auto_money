@@ -19,6 +19,9 @@ func TestLoadLiveConfigDefaults(t *testing.T) {
 	if cfg.Live.Runtime.ArmingState != "safe" {
 		t.Fatalf("unexpected arming state: %s", cfg.Live.Runtime.ArmingState)
 	}
+	if cfg.WatchlistPath != "platform/watchlist.yaml" {
+		t.Fatalf("unexpected watchlist path: %s", cfg.WatchlistPath)
+	}
 }
 
 func TestLoadMSTRE2EConfig(t *testing.T) {

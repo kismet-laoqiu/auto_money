@@ -11,6 +11,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"quantlab/internal/config"
+	"quantlab/internal/strategybundle"
+	"quantlab/internal/watchlist"
 )
 
 func TestRunBacktestPostsRequestAndPrintsResponse(t *testing.T) {
@@ -279,9 +283,11 @@ func TestRunWarehouseHealthPrintsStatus(t *testing.T) {
 func TestRunHistoricalSyncUsesDefaultAllowlistWhenSymbolsOmitted(t *testing.T) {
 	originalLoad := loadWarehouseConfig
 	originalHistorical := runHistoricalSync
+	originalWatchlist := loadWatchlistFile
 	defer func() {
 		loadWarehouseConfig = originalLoad
 		runHistoricalSync = originalHistorical
+		loadWatchlistFile = originalWatchlist
 	}()
 
 	loadWarehouseConfig = func(path string) (warehouseConfig, error) {
@@ -290,11 +296,23 @@ func TestRunHistoricalSyncUsesDefaultAllowlistWhenSymbolsOmitted(t *testing.T) {
 		}
 		return warehouseConfig{DSN: "postgres://warehouse"}, nil
 	}
+	loadWatchlistFile = func(path string) (watchlist.File, error) {
+		if path != "configs/platform/watchlist.yaml" {
+			t.Fatalf("unexpected watchlist path: %s", path)
+		}
+		return watchlist.File{
+			Symbols: []config.LiveSymbolConfig{
+				{Symbol: "BTCUSDT"},
+				{Symbol: "ETHUSDT"},
+			},
+			HistoricalIntervals: []string{"15m", "1h", "4h", "1d", "1w"},
+		}, nil
+	}
 	runHistoricalSync = func(_ context.Context, cfg warehouseConfig, request historicalRequest) (historicalSyncResult, error) {
 		if cfg.DSN != "postgres://warehouse" {
 			t.Fatalf("unexpected config: %+v", cfg)
 		}
-		if len(request.Symbols) != len(defaultHistoricalSymbols) || request.Symbols[0] != "BTCUSDT" || request.Symbols[len(request.Symbols)-1] != "DOGEUSDT" {
+		if len(request.Symbols) != 2 || request.Symbols[0] != "BTCUSDT" || request.Symbols[1] != "ETHUSDT" {
 			t.Fatalf("unexpected default symbols: %+v", request.Symbols)
 		}
 		if len(request.Intervals) != 1 || request.Intervals[0] != "1h" {
@@ -319,6 +337,94 @@ func TestRunHistoricalSyncUsesDefaultAllowlistWhenSymbolsOmitted(t *testing.T) {
 	_ = writePipe.Close()
 	if _, err := io.ReadAll(readPipe); err != nil {
 		t.Fatalf("read stdout: %v", err)
+	}
+}
+
+func TestRunWatchlistApplyUsesWatchlistForHistoricalAndLive(t *testing.T) {
+	originalLoad := loadWarehouseConfig
+	originalHistorical := runHistoricalSync
+	originalWatchlist := loadWatchlistFile
+	originalRuntimeConfig := loadRuntimeConfig
+	defer func() {
+		loadWarehouseConfig = originalLoad
+		runHistoricalSync = originalHistorical
+		loadWatchlistFile = originalWatchlist
+		loadRuntimeConfig = originalRuntimeConfig
+	}()
+
+	loadWatchlistFile = func(path string) (watchlist.File, error) {
+		if path != "configs/platform/watchlist.yaml" {
+			t.Fatalf("unexpected watchlist path: %s", path)
+		}
+		return watchlist.File{
+			Provider:            "bitget",
+			ProductType:         "USDT-FUTURES",
+			HistoricalIntervals: []string{"15m", "1h", "4h", "1d", "1w"},
+			HorizonDays:         1095,
+			Symbols: []config.LiveSymbolConfig{
+				{Symbol: "BTCUSDT", MaxNotional: 500, MaxTranches: 4},
+				{Symbol: "ETHUSDT", MaxNotional: 500, MaxTranches: 4},
+			},
+		}, nil
+	}
+	loadWarehouseConfig = func(path string) (warehouseConfig, error) {
+		if path != "configs/platform/warehouse.yaml" {
+			t.Fatalf("unexpected warehouse path: %s", path)
+		}
+		return warehouseConfig{DSN: "postgres://warehouse"}, nil
+	}
+	runHistoricalSync = func(_ context.Context, cfg warehouseConfig, request historicalRequest) (historicalSyncResult, error) {
+		if cfg.DSN != "postgres://warehouse" {
+			t.Fatalf("unexpected cfg: %+v", cfg)
+		}
+		if len(request.Symbols) != 2 || request.Symbols[0] != "BTCUSDT" || request.Symbols[1] != "ETHUSDT" {
+			t.Fatalf("unexpected symbols: %+v", request.Symbols)
+		}
+		if len(request.Intervals) != 5 || request.Intervals[0] != "15m" || request.Intervals[4] != "1w" {
+			t.Fatalf("unexpected intervals: %+v", request.Intervals)
+		}
+		if request.HorizonDays != 1095 {
+			t.Fatalf("unexpected horizon: %d", request.HorizonDays)
+		}
+		return historicalSyncResult{ArtifactDir: "artifacts/platform/historical-sync/apply"}, nil
+	}
+	loadRuntimeConfig = func(path string) (config.Config, *strategybundle.Bundle, error) {
+		if path != "configs/live-bitget.yaml" {
+			t.Fatalf("unexpected live config path: %s", path)
+		}
+		return config.Config{
+			Live: config.LiveConfig{
+				Exchange: config.ExchangeConfig{
+					ProductType: "USDT-FUTURES",
+					Symbols: []config.LiveSymbolConfig{
+						{Symbol: "BTCUSDT"},
+						{Symbol: "ETHUSDT"},
+					},
+				},
+			},
+		}, nil, nil
+	}
+
+	originalStdout := os.Stdout
+	readPipe, writePipe, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe stdout: %v", err)
+	}
+	defer readPipe.Close()
+	defer writePipe.Close()
+	os.Stdout = writePipe
+	defer func() { os.Stdout = originalStdout }()
+
+	if err := runWatchlist([]string{"apply", "-watchlist", "configs/platform/watchlist.yaml", "-live-config", "configs/live-bitget.yaml", "-warehouse-config", "configs/platform/warehouse.yaml"}); err != nil {
+		t.Fatalf("run watchlist apply: %v", err)
+	}
+	_ = writePipe.Close()
+	output, err := io.ReadAll(readPipe)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	if !strings.Contains(string(output), `"live_symbols": [`) || !strings.Contains(string(output), `"artifact_dir": "artifacts/platform/historical-sync/apply"`) {
+		t.Fatalf("unexpected stdout: %s", output)
 	}
 }
 
