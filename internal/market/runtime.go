@@ -128,7 +128,10 @@ func (runtime *Runtime) runPublic(ctx context.Context) error {
 			return err
 		}
 	}
-	return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fmt.Errorf("market public stream closed: symbol=%s interval=%s", runtime.cfg.Symbol, runtime.cfg.Interval)
 }
 
 func (runtime *Runtime) runPrivate(ctx context.Context) error {
@@ -139,7 +142,10 @@ func (runtime *Runtime) runPrivate(ctx context.Context) error {
 			return ctx.Err()
 		case raw, ok := <-rawCh:
 			if !ok {
-				return ctx.Err()
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				return fmt.Errorf("market private stream closed: product_type=%s", runtime.cfg.ProductType)
 			}
 			events, err := runtime.cfg.PrivateDecoder.Decode(raw)
 			if err != nil {

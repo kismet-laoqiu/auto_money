@@ -3,6 +3,7 @@ package market
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,6 +45,34 @@ func (source fakeEventSource) Events(ctx context.Context) <-chan []byte {
 			}
 		}
 	}()
+	return out
+}
+
+type stickyEventSource struct {
+	messages [][]byte
+}
+
+func (source stickyEventSource) Events(ctx context.Context) <-chan []byte {
+	out := make(chan []byte, len(source.messages))
+	go func() {
+		defer close(out)
+		for _, msg := range source.messages {
+			select {
+			case <-ctx.Done():
+				return
+			case out <- msg:
+			}
+		}
+		<-ctx.Done()
+	}()
+	return out
+}
+
+type closingEventSource struct{}
+
+func (closingEventSource) Events(context.Context) <-chan []byte {
+	out := make(chan []byte)
+	close(out)
 	return out
 }
 
@@ -93,6 +122,8 @@ func (store *dedupeRecordingStore) AppendEvent(_ context.Context, source string,
 
 func TestRuntimePersistsBootstrapAndPublicEvents(t *testing.T) {
 	store := &recordingStore{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	runtime := NewRuntime(RuntimeConfig{
 		Symbol:         "MSTRUSDT",
 		ProductType:    "USDT-FUTURES",
@@ -102,13 +133,22 @@ func TestRuntimePersistsBootstrapAndPublicEvents(t *testing.T) {
 		Loader: fakeBootstrapLoader{events: []BarClosedEvent{
 			{EventIDValue: "bootstrap-1", SymbolValue: "MSTRUSDT", Interval: "1m", Ts: time.Unix(1710000000, 0), Close: 62000},
 		}},
-		Source: fakeEventSource{messages: [][]byte{[]byte(`{"kind":"public"}`)}},
+		Source: stickyEventSource{messages: [][]byte{[]byte(`{"kind":"public"}`)}},
 		Decoder: &fakeDecoder{batches: [][]MarketEvent{{
 			TradeTickEvent{EventIDValue: "trade-1", SymbolValue: "MSTRUSDT", Ts: time.Unix(1710000001, 0), Price: 62010, Size: 0.02, Side: "buy"},
 			BarClosedEvent{EventIDValue: "bar-1", SymbolValue: "MSTRUSDT", Interval: "1m", Ts: time.Unix(1710000060, 0), Close: 62080},
 		}}},
 	})
-	if err := runtime.Run(context.Background()); err != nil {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- runtime.Run(ctx)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for len(store.events) != 3 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	if err := <-errCh; err != context.Canceled {
 		t.Fatalf("run runtime: %v", err)
 	}
 	if len(store.events) != 3 {
@@ -127,6 +167,8 @@ func TestRuntimePersistsBootstrapAndPublicEvents(t *testing.T) {
 
 func TestRuntimePersistsPrivateBootstrapAndStreamingEvents(t *testing.T) {
 	store := &recordingStore{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	publicDecoder := &fakeDecoder{batches: [][]MarketEvent{{
 		TradeTickEvent{EventIDValue: "trade-1", SymbolValue: "MSTRUSDT", Ts: time.Unix(1710000001, 0), Price: 62010, Size: 0.02, Side: "buy"},
 	}}}
@@ -147,12 +189,21 @@ func TestRuntimePersistsPrivateBootstrapAndStreamingEvents(t *testing.T) {
 			accounts:  []AccountEvent{{EventIDValue: "account-1", SymbolValue: "USDT", MarginCoin: "USDT", Available: 10}},
 			positions: []PositionEvent{{EventIDValue: "position-1", SymbolValue: "MSTRUSDT", Qty: 0.01}},
 		},
-		Source:         fakeEventSource{messages: [][]byte{[]byte(`{"kind":"public"}`)}},
+		Source:         stickyEventSource{messages: [][]byte{[]byte(`{"kind":"public"}`)}},
 		Decoder:        publicDecoder,
-		PrivateSource:  fakeEventSource{messages: [][]byte{[]byte(`{"kind":"private"}`)}},
+		PrivateSource:  stickyEventSource{messages: [][]byte{[]byte(`{"kind":"private"}`)}},
 		PrivateDecoder: privateDecoder,
 	})
-	if err := runtime.Run(context.Background()); err != nil {
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- runtime.Run(ctx)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for len(store.events) != 5 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	if err := <-errCh; err != context.Canceled {
 		t.Fatalf("run runtime: %v", err)
 	}
 	if len(store.events) != 5 {
@@ -197,6 +248,43 @@ func TestRuntimeIgnoresDuplicateBootstrapEventsOnRestart(t *testing.T) {
 	}
 	if len(store.events) != 1 {
 		t.Fatalf("unexpected event count after restart: %d", len(store.events))
+	}
+}
+
+func TestRuntimeReturnsErrorWhenPublicStreamClosesUnexpectedly(t *testing.T) {
+	runtime := NewRuntime(RuntimeConfig{
+		Symbol:      "MSTRUSDT",
+		ProductType: "USDT-FUTURES",
+		Interval:    "1m",
+		AppendEvent: (&recordingStore{}).AppendEvent,
+		Source:      closingEventSource{},
+		Decoder:     &fakeDecoder{},
+	})
+
+	err := runtime.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error when public stream closes unexpectedly")
+	}
+	if !strings.HasPrefix(err.Error(), "market public stream closed") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRuntimeReturnsErrorWhenPrivateStreamClosesUnexpectedly(t *testing.T) {
+	runtime := NewRuntime(RuntimeConfig{
+		ProductType:    "USDT-FUTURES",
+		MarginCoin:     "USDT",
+		AppendEvent:    (&recordingStore{}).AppendEvent,
+		PrivateSource:  closingEventSource{},
+		PrivateDecoder: &fakeDecoder{},
+	})
+
+	err := runtime.Run(context.Background())
+	if err == nil {
+		t.Fatal("expected error when private stream closes unexpectedly")
+	}
+	if !strings.HasPrefix(err.Error(), "market private stream closed") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

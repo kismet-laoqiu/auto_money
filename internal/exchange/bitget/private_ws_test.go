@@ -1,8 +1,16 @@
 package bitget
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/gorilla/websocket"
 
 	"quantlab/internal/market"
 )
@@ -109,5 +117,101 @@ func TestDecodePrivateAccountEvent(t *testing.T) {
 	}
 	if account.MarginCoin != "USDT" || account.Available != 11.98545761 || account.Kind() != "account_snapshot" {
 		t.Fatalf("unexpected account event: %+v", account)
+	}
+}
+
+func TestPrivateWSSourceReconnectsAfterServerClose(t *testing.T) {
+	previousReconnectDelay := wsReconnectDelay
+	previousPingInterval := wsPingInterval
+	wsReconnectDelay = 10 * time.Millisecond
+	wsPingInterval = time.Hour
+	defer func() {
+		wsReconnectDelay = previousReconnectDelay
+		wsPingInterval = previousPingInterval
+	}()
+
+	var connections atomic.Int32
+	hold := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Upgrade(w, r, nil, 1024, 1024)
+		if err != nil {
+			t.Errorf("upgrade websocket: %v", err)
+			return
+		}
+		defer conn.Close()
+
+		var login loginFrame
+		if err := conn.ReadJSON(&login); err != nil {
+			t.Errorf("read login: %v", err)
+			return
+		}
+		if login.Op != "login" || len(login.Args) != 1 || login.Args[0].APIKey != "key" {
+			t.Errorf("unexpected login frame: %+v", login)
+			return
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(`{"event":"login","code":0}`)); err != nil {
+			t.Errorf("write login ack: %v", err)
+			return
+		}
+
+		var frame privateSubscribeFrame
+		if err := conn.ReadJSON(&frame); err != nil {
+			t.Errorf("read subscribe: %v", err)
+			return
+		}
+		if len(frame.Args) != 1 || frame.Args[0].Channel != "orders" {
+			t.Errorf("unexpected subscribe frame: %+v", frame)
+			return
+		}
+
+		ordinal := connections.Add(1)
+		payload := []byte(`{"arg":{"channel":"orders","instId":"default"},"data":[{"clientOid":"ql-1","orderId":"123","status":"filled","size":"0.01","priceAvg":"62010"}]}`)
+		if ordinal == 2 {
+			payload = []byte(`{"arg":{"channel":"orders","instId":"default"},"data":[{"clientOid":"ql-2","orderId":"124","status":"filled","size":"0.02","priceAvg":"62020"}]}`)
+		}
+		if err := conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			t.Errorf("write payload: %v", err)
+			return
+		}
+		if ordinal == 1 {
+			return
+		}
+		<-hold
+	}))
+	defer server.Close()
+
+	source := NewPrivateWSSource(
+		"ws"+strings.TrimPrefix(server.URL, "http"),
+		PrivateCredentials{Key: "key", Secret: "secret", Passphrase: "passphrase"},
+		PrivateSubscription{InstType: "USDT-FUTURES", Channel: "orders", InstID: "default"},
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	events := source.Events(ctx)
+	first := readPrivateRawMessage(t, events)
+	second := readPrivateRawMessage(t, events)
+	close(hold)
+	cancel()
+
+	if string(first) == string(second) {
+		t.Fatalf("expected reconnect to deliver a distinct second payload, got %q then %q", first, second)
+	}
+	if connections.Load() < 2 {
+		t.Fatalf("expected reconnect, saw %d websocket connections", connections.Load())
+	}
+}
+
+func readPrivateRawMessage(t *testing.T, events <-chan []byte) []byte {
+	t.Helper()
+	select {
+	case payload, ok := <-events:
+		if !ok {
+			t.Fatal("events channel closed unexpectedly")
+		}
+		return payload
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for websocket payload")
+		return nil
 	}
 }

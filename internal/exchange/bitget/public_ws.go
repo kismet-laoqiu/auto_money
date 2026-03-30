@@ -1,6 +1,7 @@
 package bitget
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,13 @@ import (
 )
 
 const defaultPublicWSURL = "wss://ws.bitget.com/v2/ws/public"
+
+var (
+	wsReconnectDelay = time.Second
+	wsPingInterval   = 30 * time.Second
+	wsReadTimeout    = 90 * time.Second
+	wsWriteTimeout   = 5 * time.Second
+)
 
 type PublicSubscription struct {
 	InstType string
@@ -72,38 +80,89 @@ func (source *PublicWSSource) Events(ctx context.Context) <-chan []byte {
 	out := make(chan []byte)
 	go func() {
 		defer close(out)
-		conn, _, err := source.dialer.DialContext(ctx, source.url, nil)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
-		go func() {
-			<-ctx.Done()
-			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "context canceled"), time.Now().Add(time.Second))
-			_ = conn.Close()
-		}()
-
-		args := make([]publicArg, 0, len(source.subscriptions))
-		for _, sub := range source.subscriptions {
-			args = append(args, publicArg{InstType: sub.InstType, Channel: sub.Channel, InstID: sub.InstID})
-		}
-		if err := conn.WriteJSON(publicSubscribeFrame{Op: "subscribe", Args: args}); err != nil {
-			return
-		}
 		for {
-			_, data, err := conn.ReadMessage()
-			if err != nil {
+			if err := source.stream(ctx, out); err == nil || ctx.Err() != nil {
 				return
 			}
 			select {
 			case <-ctx.Done():
 				return
-			case out <- data:
+			case <-time.After(wsReconnectDelay):
 			}
 		}
 	}()
 	return out
+}
+
+func (source *PublicWSSource) stream(ctx context.Context, out chan<- []byte) error {
+	conn, _, err := source.dialer.DialContext(ctx, source.url, nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	args := make([]publicArg, 0, len(source.subscriptions))
+	for _, sub := range source.subscriptions {
+		args = append(args, publicArg{InstType: sub.InstType, Channel: sub.Channel, InstID: sub.InstID})
+	}
+	if err := writeWSJSON(ctx, conn, publicSubscribeFrame{Op: "subscribe", Args: args}); err != nil {
+		return err
+	}
+	startWSKeepalive(ctx, conn)
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(wsReadTimeout))
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		if isWSHeartbeat(data) {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case out <- data:
+		}
+	}
+}
+
+func startWSKeepalive(ctx context.Context, conn *websocket.Conn) {
+	go func() {
+		ticker := time.NewTicker(wsPingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				deadline := time.Now().Add(wsWriteTimeout)
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "context canceled"), deadline)
+				_ = conn.Close()
+				return
+			case <-ticker.C:
+				_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
+				if err := conn.WriteMessage(websocket.TextMessage, []byte("ping")); err != nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+	}()
+}
+
+func writeWSJSON(ctx context.Context, conn *websocket.Conn, payload any) error {
+	_ = conn.SetWriteDeadline(wsWriteDeadline(ctx))
+	return conn.WriteJSON(payload)
+}
+
+func wsWriteDeadline(ctx context.Context) time.Time {
+	deadline := time.Now().Add(wsWriteTimeout)
+	if value, ok := ctx.Deadline(); ok && value.Before(deadline) {
+		return value
+	}
+	return deadline
+}
+
+func isWSHeartbeat(data []byte) bool {
+	return bytes.EqualFold(bytes.TrimSpace(data), []byte("pong"))
 }
 
 func NewPublicWSDecoder() *PublicWSDecoder {

@@ -130,50 +130,62 @@ func (source *PrivateWSSource) Events(ctx context.Context) <-chan []byte {
 	out := make(chan []byte)
 	go func() {
 		defer close(out)
-		conn, _, err := source.dialer.DialContext(ctx, source.url, nil)
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
-		go func() {
-			<-ctx.Done()
-			_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "context canceled"), time.Now().Add(time.Second))
-			_ = conn.Close()
-		}()
-
-		ts := fmt.Sprintf("%d", time.Now().UTC().Unix())
-		if err := conn.WriteJSON(BuildLoginFrame(ts, source.creds, NewSigner(source.creds.Secret))); err != nil {
-			return
-		}
-		if err := waitForPrivateEvent(ctx, conn, "login"); err != nil {
-			return
-		}
-		args := make([]privateArg, 0, len(source.subscriptions))
-		for _, sub := range source.subscriptions {
-			args = append(args, privateArg{
-				InstType: sub.InstType,
-				Channel:  sub.Channel,
-				InstID:   sub.InstID,
-				Coin:     sub.Coin,
-			})
-		}
-		if err := conn.WriteJSON(privateSubscribeFrame{Op: "subscribe", Args: args}); err != nil {
-			return
-		}
 		for {
-			_, data, err := conn.ReadMessage()
-			if err != nil {
+			if err := source.stream(ctx, out); err == nil || ctx.Err() != nil {
 				return
 			}
 			select {
 			case <-ctx.Done():
 				return
-			case out <- data:
+			case <-time.After(wsReconnectDelay):
 			}
 		}
 	}()
 	return out
+}
+
+func (source *PrivateWSSource) stream(ctx context.Context, out chan<- []byte) error {
+	conn, _, err := source.dialer.DialContext(ctx, source.url, nil)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	ts := fmt.Sprintf("%d", time.Now().UTC().Unix())
+	if err := writeWSJSON(ctx, conn, BuildLoginFrame(ts, source.creds, NewSigner(source.creds.Secret))); err != nil {
+		return err
+	}
+	if err := waitForPrivateEvent(ctx, conn, "login"); err != nil {
+		return err
+	}
+	args := make([]privateArg, 0, len(source.subscriptions))
+	for _, sub := range source.subscriptions {
+		args = append(args, privateArg{
+			InstType: sub.InstType,
+			Channel:  sub.Channel,
+			InstID:   sub.InstID,
+			Coin:     sub.Coin,
+		})
+	}
+	if err := writeWSJSON(ctx, conn, privateSubscribeFrame{Op: "subscribe", Args: args}); err != nil {
+		return err
+	}
+	startWSKeepalive(ctx, conn)
+	for {
+		_ = conn.SetReadDeadline(time.Now().Add(wsReadTimeout))
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return err
+		}
+		if isWSHeartbeat(data) {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case out <- data:
+		}
+	}
 }
 
 func waitForPrivateEvent(ctx context.Context, conn *websocket.Conn, want string) error {
