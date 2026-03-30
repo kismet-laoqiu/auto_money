@@ -39,7 +39,7 @@ PATH=/usr/local/go/bin:$PATH go run ./cmd/platformctl warehouse health -config c
 不要再去手工同步：
 
 - `cmd/platformctl/main.go` 的硬编码 symbol 列表
-- `configs/live-bitget.yaml` 里的 symbol 数组
+- `configs/live.yaml` 里的 symbol 数组
 
 当前这些都不再是主入口。
 
@@ -56,7 +56,7 @@ PATH=/usr/local/go/bin:$PATH go build -o ./bin/platformctl ./cmd/platformctl
 ```bash
 ./bin/platformctl watchlist apply \
   -watchlist configs/platform/watchlist.yaml \
-  -live-config configs/live-bitget.yaml \
+  -live-config configs/live.yaml \
   -warehouse-config configs/platform/warehouse.yaml
 ```
 
@@ -78,7 +78,7 @@ systemctl status quantlab-marketd --no-pager -l
 
 通过标准：
 
-- `ExecStart` 指向 `configs/live-bitget.yaml`
+- `ExecStart` 指向 `configs/live.yaml`
 - `marketd` 进程正常运行
 - 新增 symbol 已经被订阅
 
@@ -128,8 +128,8 @@ systemctl status quantlab-marketd --no-pager -l
 
 同日已补齐 live warehouse 链路：
 
-- `marketd` 读取 `configs/live-bitget.yaml`
-- `configs/live-bitget.yaml` 通过 `watchlist_path` 解析 15 个 symbol
+- `marketd` 读取 `configs/live.yaml`
+- `configs/live.yaml` 通过 `watchlist_path` 解析 15 个 symbol
 - `marketd` 通过 `warehouse_config_path` 连接 PG warehouse
 - 每个 watchlist symbol 订阅 `15m/1h/4h/1d/1w` 五档 candle channel
 - PG `market_bars` 只写 closed bar，不写未收盘的进行中 bar

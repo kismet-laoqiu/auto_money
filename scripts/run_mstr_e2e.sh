@@ -3,7 +3,7 @@ set -euo pipefail
 
 PATH=/usr/local/go/bin:/usr/bin:/bin
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SOURCE_CONFIG_PATH=${1:-configs/demo-mstr-e2e.yaml}
+SOURCE_CONFIG_PATH=${1:-configs/live.yaml}
 REST_BASE_URL=${REST_BASE_URL:-https://api.bitget.com}
 SYMBOL=${SYMBOL:-MSTRUSDT}
 PRODUCT_TYPE=${PRODUCT_TYPE:-USDT-FUTURES}
@@ -22,6 +22,21 @@ RULES_JSON="$ARTIFACT_DIR/contract-rules.json"
 TICKER_JSON="$ARTIFACT_DIR/ticker.json"
 SUMMARY_JSON="$ARTIFACT_DIR/preflight-summary.json"
 SIZE_FILE="$ARTIFACT_DIR/effective-size.txt"
+
+resolve_path() {
+	local base_dir=$1
+	local raw_path=$2
+	BASE_DIR="$base_dir" RAW_PATH="$raw_path" python3.11 - <<'PY'
+import os
+from pathlib import Path
+
+base_dir = Path(os.environ["BASE_DIR"])
+raw_path = Path(os.environ["RAW_PATH"])
+if not raw_path.is_absolute():
+    raw_path = base_dir / raw_path
+print(raw_path.resolve())
+PY
+}
 
 require_env() {
 	local name=$1
@@ -61,6 +76,7 @@ run_smoke() {
 
 cd "$ROOT_DIR"
 mkdir -p "$ARTIFACT_DIR"
+SOURCE_CONFIG_PATH=$(resolve_path "$ROOT_DIR" "$SOURCE_CONFIG_PATH")
 
 require_env BITGET_API_KEY
 require_env BITGET_API_SECRET
@@ -172,11 +188,50 @@ size_path.write_text(effective_size_text + "\n", encoding="utf-8")
 print(json.dumps(summary, indent=2))
 PY
 
-if ! grep -q '^    state_db_path:' "$SOURCE_CONFIG_PATH"; then
-	echo "missing runtime.state_db_path in $SOURCE_CONFIG_PATH" >&2
-	exit 1
-fi
-sed "s|^    state_db_path: .*|    state_db_path: $STATE_DB_PATH|" "$SOURCE_CONFIG_PATH" >"$CONFIG_PATH"
+SOURCE_CONFIG_PATH="$SOURCE_CONFIG_PATH" \
+CONFIG_PATH="$CONFIG_PATH" \
+STATE_DB_PATH="$STATE_DB_PATH" \
+python3.11 - <<'PY'
+import os
+from pathlib import Path
+
+source_path = Path(os.environ["SOURCE_CONFIG_PATH"]).resolve()
+config_path = Path(os.environ["CONFIG_PATH"])
+state_db_path = os.environ["STATE_DB_PATH"]
+source_dir = source_path.parent
+lines = source_path.read_text(encoding="utf-8").splitlines()
+rendered = []
+state_db_replaced = False
+
+def normalize_path(value: str) -> str:
+    cleaned = value.strip().strip("\"'")
+    if not cleaned:
+        return cleaned
+    path = Path(cleaned)
+    if not path.is_absolute():
+        path = source_dir / path
+    return str(path.resolve())
+
+for line in lines:
+    if line.startswith("    state_db_path:"):
+        rendered.append(f"    state_db_path: {state_db_path}")
+        state_db_replaced = True
+        continue
+    if line.startswith("watchlist_path:"):
+        value = line.split(":", 1)[1]
+        rendered.append(f"watchlist_path: {normalize_path(value)}")
+        continue
+    if line.startswith("warehouse_config_path:"):
+        value = line.split(":", 1)[1]
+        rendered.append(f"warehouse_config_path: {normalize_path(value)}")
+        continue
+    rendered.append(line)
+
+if not state_db_replaced:
+    raise SystemExit(f"missing runtime.state_db_path in {source_path}")
+
+config_path.write_text("\n".join(rendered) + "\n", encoding="utf-8")
+PY
 SIZE=$(cat "$SIZE_FILE")
 
 go build -o /tmp/quantlab-marketd ./cmd/marketd

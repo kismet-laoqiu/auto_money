@@ -71,6 +71,7 @@ type watchlistApplyResult struct {
 	LiveConfigPath  string               `json:"live_config_path"`
 	LiveSymbols     []string             `json:"live_symbols"`
 	Historical      historicalSyncResult `json:"historical"`
+	Aggregated      *aggregateResult     `json:"aggregated,omitempty"`
 	ResolvedProduct string               `json:"resolved_product_type"`
 }
 
@@ -429,7 +430,7 @@ func runWatchlist(args []string) error {
 	}
 	fs := flag.NewFlagSet("watchlist apply", flag.ContinueOnError)
 	watchlistPath := fs.String("watchlist", "configs/platform/watchlist.yaml", "watchlist file path")
-	liveConfigPath := fs.String("live-config", "configs/live-bitget.yaml", "live config file path")
+	liveConfigPath := fs.String("live-config", "configs/live.yaml", "live config file path")
 	warehouseConfigPath := fs.String("warehouse-config", "configs/platform/warehouse.yaml", "warehouse config path")
 	limit := fs.Int("limit", 200, "bars per request")
 	artifactRoot := fs.String("artifact-root", "artifacts/platform/historical-sync", "artifact output root")
@@ -448,13 +449,27 @@ func runWatchlist(args []string) error {
 		Provider:     file.Provider,
 		ProductType:  file.ProductType,
 		Symbols:      file.SymbolNames(),
-		Intervals:    append([]string(nil), file.HistoricalIntervals...),
+		Intervals:    watchlistHistoricalIntervals(file.HistoricalIntervals),
 		Limit:        *limit,
 		HorizonDays:  file.HorizonDays,
 		ArtifactRoot: *artifactRoot,
 	})
 	if err != nil {
 		return err
+	}
+	var aggregated *aggregateResult
+	aggregateIntervals := watchlistAggregateIntervals(file.HistoricalIntervals)
+	if len(aggregateIntervals) > 0 {
+		result, err := runAggregateSync(context.Background(), cfg, aggregateRequest{
+			Provider:    file.Provider,
+			ProductType: file.ProductType,
+			Symbols:     file.SymbolNames(),
+			Intervals:   aggregateIntervals,
+		})
+		if err != nil {
+			return err
+		}
+		aggregated = &result
 	}
 	resolved, _, err := loadRuntimeConfig(*liveConfigPath)
 	if err != nil {
@@ -465,6 +480,7 @@ func runWatchlist(args []string) error {
 		LiveConfigPath:  *liveConfigPath,
 		LiveSymbols:     make([]string, 0, len(resolved.Live.Exchange.Symbols)),
 		Historical:      historical,
+		Aggregated:      aggregated,
 		ResolvedProduct: resolved.Live.Exchange.ProductType,
 	}
 	for _, item := range resolved.Live.Exchange.Symbols {
@@ -474,6 +490,31 @@ func runWatchlist(args []string) error {
 		result.LiveSymbols = append(result.LiveSymbols, item.Symbol)
 	}
 	return printJSON(result)
+}
+
+func watchlistAggregateIntervals(intervals []string) []string {
+	out := make([]string, 0, len(intervals))
+	seen := map[string]bool{}
+	for _, interval := range intervals {
+		switch normalized := strings.ToLower(strings.TrimSpace(interval)); normalized {
+		case "1h", "4h", "1d", "1w":
+			if seen[normalized] {
+				continue
+			}
+			seen[normalized] = true
+			out = append(out, normalized)
+		}
+	}
+	return out
+}
+
+func watchlistHistoricalIntervals(intervals []string) []string {
+	for _, interval := range intervals {
+		if strings.EqualFold(strings.TrimSpace(interval), "15m") {
+			return []string{"15m"}
+		}
+	}
+	return append([]string(nil), intervals...)
 }
 
 func runAggregate(args []string) error {

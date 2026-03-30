@@ -13,9 +13,9 @@
 
 ## Preflight
 
-- Confirm `configs/demo-mstr-e2e.yaml` keeps `live.runtime.observe_only: true`.
-- Confirm both demo and live configs keep `live.runtime.arming_state: safe`.
-- Confirm `configs/demo-mstr-e2e.yaml` and live config do not share the same `state_db_path`.
+- Confirm `configs/live.yaml` keeps `live.runtime.observe_only: true`.
+- Confirm `configs/live.yaml` keeps `live.runtime.arming_state: safe`.
+- Confirm `scripts/run_mstr_e2e.sh` still generates an artifact-local `runtime-config.yaml` and `runtime-state.db`, instead of mutating `configs/live.yaml` or reusing `var/live-state.db`.
 - Confirm `BITGET_API_KEY`, `BITGET_API_SECRET`, and `BITGET_PASSPHRASE` are present before running any MSTR E2E step.
 - Keep `live.agent.advisory_only: true`; only enable `agentd` after `OPENAI_API_KEY` is present.
 - Treat `MSTRUSDT` real minimum effective live size as `0.04` until a fresh preflight proves a new value.
@@ -28,29 +28,27 @@ PATH=/usr/local/go/bin:/usr/bin:/bin go test ./...
 PATH=/usr/local/go/bin:/usr/bin:/bin go build ./cmd/lab ./cmd/marketd ./cmd/traderd ./cmd/agentd ./cmd/platformd ./cmd/platformctl ./cmd/notifierd
 PATH=/usr/local/go/bin:/usr/bin:/bin go build ./cmd/execd
 PATH=/usr/local/go/bin:/usr/bin:/bin ./scripts/run_mstr_e2e.sh
-PATH=/usr/local/go/bin:/usr/bin:/bin go run ./cmd/lab replay -config configs/demo-mstr-e2e.yaml
+PATH=/usr/local/go/bin:/usr/bin:/bin go run ./cmd/lab replay -config configs/live.yaml
 PATH=/usr/local/go/bin:/usr/bin:/bin go build -o /tmp/quantlab-marketd ./cmd/marketd
 PATH=/usr/local/go/bin:/usr/bin:/bin go build -o /tmp/quantlab-traderd ./cmd/traderd
 RUN_BITGET_REAL=1 BITGET_API_KEY=... BITGET_API_SECRET=... BITGET_PASSPHRASE=... PATH=/usr/local/go/bin:/usr/bin:/bin go test ./internal/execution -run TestRealExecutionRuntimeIntentLifecycle -v
-PATH=/usr/local/go/bin:/usr/bin:/bin timeout --preserve-status --signal=INT --kill-after=2s 900s /tmp/quantlab-marketd -config configs/demo-mstr-e2e.yaml
-PATH=/usr/local/go/bin:/usr/bin:/bin timeout --preserve-status --signal=INT --kill-after=2s 900s /tmp/quantlab-traderd -config configs/demo-mstr-e2e.yaml
+PATH=/usr/local/go/bin:/usr/bin:/bin timeout --preserve-status --signal=INT --kill-after=2s 900s /tmp/quantlab-marketd -config configs/live.yaml
+PATH=/usr/local/go/bin:/usr/bin:/bin timeout --preserve-status --signal=INT --kill-after=2s 900s /tmp/quantlab-traderd -config configs/live.yaml
 ```
 
 ## Staged Rollout
 
-1. Demo trading with `observe_only=true`.
-2. Demo trading with `observe_only=false` and `arming_state=safe`.
-3. Demo trading with manual arm to `armed` only after reconciliation and reduce-only exit checks pass.
-4. Live trading with `observe_only=true`.
-5. Live trading with `observe_only=false` and `arming_state=safe`.
-6. Live trading with manual arm to `armed` only after all demo gates remain green.
-7. Keep `execd` as the sole write sidecar and block any platform-level promotion if `traderd` regains exchange write code.
+1. Keep `configs/live.yaml` at `observe_only=true` and `arming_state=safe`.
+2. Run `scripts/run_mstr_e2e.sh` so it generates an isolated runtime config and state DB from `configs/live.yaml`.
+3. Move `configs/live.yaml` to `observe_only=false` only after preflight, reconciliation, and reduce-only exit checks stay green.
+4. Manual arm to `armed` happens only after the safe-mode runtime remains green.
+5. Keep `execd` as the sole write sidecar and block any platform-level promotion if `traderd` regains exchange write code.
 
 ## Promotion Gates
 
 - `go test ./...` passes.
 - `go build ./cmd/lab ./cmd/marketd ./cmd/traderd ./cmd/agentd ./cmd/platformd ./cmd/platformctl ./cmd/notifierd ./cmd/execd` passes.
-- `lab replay -config configs/demo-mstr-e2e.yaml` exits `0` and writes a replay report under `artifacts/mstr-e2e/`.
+- `lab replay -config configs/live.yaml` exits `0` and writes a replay report under `artifacts/live/`.
 - `scripts/run_mstr_e2e.sh` writes a preflight summary under `artifacts/mstr-e2e/<run_id>/`.
 - Demo smoke keeps `marketd` and `traderd` alive for the configured smoke window.
 - No manual override bypasses `safe`, `degraded`, or `halted` behavior.
@@ -67,6 +65,6 @@ PATH=/usr/local/go/bin:/usr/bin:/bin timeout --preserve-status --signal=INT --ki
 
 - Current `marketd` smoke validates startup, config loading, liveness, and signal handling. It does not prove full public websocket ingestion health end-to-end.
 - Current `agentd` gate is advisory-only configuration plus build verification. It does not participate in order execution.
-- Current `platformd` now serves `bars / features / backtest run / promotion request+gate` APIs, but it still lacks `strategy versions` and `live ops`.
-- Current Telegram bot integration is outbound-only; command ingress has not been wired yet.
-- `execd` real lifecycle is verified via package test and temp SQLite intent replay; service orchestration and systemd wiring are still pending.
+- Current PG live ingestion writes only closed bars for `15m/1h/4h/1d/1w`; it does not persist in-progress bars.
+- Watchlist changes are not hot-reloaded. After `platformctl watchlist apply`, `marketd` still needs a restart to subscribe the new symbols.
+- In `/api/status`, compare consumer cursors only within their own source contract. `execd` is trader-intent-only and should not be judged against the global market-driven `last_seq`.

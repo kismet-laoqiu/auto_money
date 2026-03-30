@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +78,7 @@ func TestFetchBitgetUsesFuturesCandlesPathWhenProductTypeSet(t *testing.T) {
 	}
 }
 
-func TestBitgetMixEndpointOmitsStartTimeForLongHistoryWindow(t *testing.T) {
+func TestBitgetMixEndpointClampsStartTimeForLongHistoryWindow(t *testing.T) {
 	spec := config.DatasetConfig{
 		Symbol:      "BTCUSDT",
 		ProductType: "USDT-FUTURES",
@@ -92,8 +93,9 @@ func TestBitgetMixEndpointOmitsStartTimeForLongHistoryWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse endpoint: %v", err)
 	}
-	if parsedURL.Query().Get("startTime") != "" {
-		t.Fatalf("expected startTime omitted for long history window, got %s", endpoint)
+	expectedStart := strconv.FormatInt(spec.EndTime.Add(-90*24*time.Hour).UnixMilli(), 10)
+	if got := parsedURL.Query().Get("startTime"); got != expectedStart {
+		t.Fatalf("expected clamped startTime=%s, got %s in %s", expectedStart, got, endpoint)
 	}
 	if parsedURL.Query().Get("endTime") == "" {
 		t.Fatalf("expected endTime in endpoint, got %s", endpoint)

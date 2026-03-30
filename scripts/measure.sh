@@ -49,8 +49,8 @@ run_smoke() {
 
 runtime_config_name=$(basename "$CHECK_CONFIG_PATH")
 is_live_runtime=0
-case "$runtime_config_name" in
-	demo-bitget.yaml|live-bitget.yaml)
+	case "$runtime_config_name" in
+		live.yaml)
 		is_live_runtime=1
 		;;
 esac
@@ -93,7 +93,7 @@ print(f"POSITIVE_OOS_RETURN_RATIO={robust.get('positive_oos_return_ratio', 0):.1
 print(f"REPLAY_EVENT_COUNT={replay.get('event_count', 0)}")
 print(f"REPLAY_COMMAND_COUNT={replay.get('command_count', 0)}")
 print(f"REPLAY_CANDIDATE_COUNT={replay.get('candidate_count', 0)}")
-if runtime_config_name in {'demo-bitget.yaml', 'live-bitget.yaml'}:
+if runtime_config_name == 'live.yaml':
     print(f"RUNTIME_CONFIG={runtime_config_name}")
     print(f"RUNTIME_SMOKE_SECONDS={os.environ.get('SMOKE_SECONDS', '5')}")
 for bucket, value in sorted(robust.get('bucket_means', {}).items()):

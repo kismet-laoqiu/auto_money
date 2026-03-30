@@ -27,7 +27,42 @@ func (store *PostgresStore) UpsertBars(ctx context.Context, spec config.DatasetC
 		return 0, err
 	}
 	defer tx.Rollback()
+	inserted, err := store.upsertBarsTx(ctx, tx, spec, bars)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return inserted, nil
+}
 
+func (store *PostgresStore) ReplaceBars(ctx context.Context, spec config.DatasetConfig, bars []core.Bar) (int, error) {
+	if store.db == nil {
+		return 0, fmt.Errorf("postgres store db is nil")
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+        DELETE FROM market_bars
+        WHERE provider = $1 AND symbol = $2 AND interval = $3
+    `, spec.Provider, spec.Symbol, spec.Interval); err != nil {
+		return 0, err
+	}
+	inserted, err := store.upsertBarsTx(ctx, tx, spec, bars)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return inserted, nil
+}
+
+func (store *PostgresStore) upsertBarsTx(ctx context.Context, tx *sql.Tx, spec config.DatasetConfig, bars []core.Bar) (int, error) {
 	stmt, err := tx.PrepareContext(ctx, `
         INSERT INTO market_bars (
             provider, symbol, interval, open_time, close_time, open, high, low, close, volume, trade_count
@@ -38,7 +73,6 @@ func (store *PostgresStore) UpsertBars(ctx context.Context, spec config.DatasetC
 		return 0, err
 	}
 	defer stmt.Close()
-
 	step, ok := intervalDuration(spec.Interval)
 	if !ok {
 		step = time.Minute
@@ -66,9 +100,6 @@ func (store *PostgresStore) UpsertBars(ctx context.Context, spec config.DatasetC
 			return 0, err
 		}
 		inserted += int(rows)
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
 	}
 	return inserted, nil
 }

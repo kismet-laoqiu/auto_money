@@ -20,7 +20,7 @@ import (
 
 func main() {
 	fs := flag.NewFlagSet("notifierd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-mstr-e2e.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	stateDBPath := fs.String("state-db", "", "override sqlite state db path")
 	healthAddr := fs.String("health-addr", "", "optional health listen address")
 	once := fs.Bool("once", false, "process currently available events and exit")

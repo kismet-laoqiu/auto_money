@@ -26,7 +26,7 @@ func TestServiceCreatesAndReplaysPromotionLifecycle(t *testing.T) {
 	request, err := service.CreateRequest(context.Background(), CreateInput{
 		StrategyID: "mstr-wave-fib",
 		Version:    "v0.1.0",
-		ConfigPath: "configs/demo-mstr-e2e.yaml",
+			ConfigPath: "configs/live.yaml",
 	})
 	if err != nil {
 		t.Fatalf("create request: %v", err)
@@ -75,7 +75,7 @@ func TestServiceCanaryDegradedEventStaysNotifierCompatible(t *testing.T) {
 	request, err := service.CreateRequest(context.Background(), CreateInput{
 		StrategyID: "mstr-wave-fib",
 		Version:    "v0.1.1",
-		ConfigPath: "configs/demo-mstr-e2e.yaml",
+			ConfigPath: "configs/live.yaml",
 	})
 	if err != nil {
 		t.Fatalf("create request: %v", err)

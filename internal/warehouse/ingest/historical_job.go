@@ -176,7 +176,7 @@ func (job *HistoricalJob) fetchBars(ctx context.Context, spec config.DatasetConf
 		if !earliest.After(horizonStart) {
 			break
 		}
-		cursor = earliest.Add(-time.Millisecond)
+		cursor = earliest
 	}
 	sortBars(bars)
 	return bars, nil

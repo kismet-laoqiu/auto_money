@@ -24,7 +24,7 @@ import (
 
 func main() {
 	fs := flag.NewFlagSet("platformd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-mstr-e2e.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	listenAddr := fs.String("listen", ":8080", "listen address")
 	stateDBPath := fs.String("state-db", "", "override sqlite state db path")
 	execdPath := fs.String("execd-path", "./execd", "execd binary path for live ops")

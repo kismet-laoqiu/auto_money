@@ -1,5 +1,7 @@
 cache_dir: data
-artifact_dir: artifacts/mstr-e2e
+artifact_dir: artifacts/live
+watchlist_path: platform/watchlist.yaml
+warehouse_config_path: platform/warehouse.yaml
 strategy:
   fast_sma: 15
   slow_sma: 60
@@ -16,9 +18,9 @@ strategy:
   slippage_bps: 3
   atr_window: 14
 datasets:
-  - name: mstrusdt_demo_replay
+  - name: btcusdt_live_replay
     provider: bitget
-    symbol: MSTRUSDT
+    symbol: BTCUSDT
     interval: 1m
     limit: 720
     product_type: USDT-FUTURES
@@ -26,7 +28,7 @@ live:
   enabled: true
   runtime:
     arming_state: safe
-    state_db_path: var/mstr-e2e-state.db
+    state_db_path: var/live-state.db
     observe_only: true
   exchange:
     venue: bitget
@@ -39,10 +41,6 @@ live:
     passphrase_env: BITGET_PASSPHRASE
     margin_mode: isolated
     position_mode: one_way_mode
-    symbols:
-      - symbol: MSTRUSDT
-        max_notional: 30
-        max_tranches: 1
   risk:
     max_leverage: 3
   agent:

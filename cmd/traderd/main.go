@@ -16,7 +16,7 @@ import (
 
 func main() {
 	fs := flag.NewFlagSet("traderd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-bitget.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)

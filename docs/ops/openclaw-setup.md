@@ -40,7 +40,7 @@ sudo -u admin \
 ```bash
 cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
 PATH=/usr/local/go/bin:/usr/bin:/bin go build -o ./bin/platformd ./cmd/platformd
-./bin/platformd -config configs/demo-mstr-e2e.yaml -listen 127.0.0.1:18080
+./bin/platformd -config configs/live.yaml -listen 127.0.0.1:18080
 ```
 
 Smoke:
@@ -49,6 +49,23 @@ Smoke:
 curl -fsS http://127.0.0.1:18080/health
 curl -fsS http://127.0.0.1:18080/api/status
 ```
+
+## Sync Quant Platform Skill
+
+OpenClaw runtime uses the workspace copy under `/home/admin/.openclaw/workspace/skills/quant-platform-operator/SKILL.md`. After any repo-side skill update, sync the file before rerunning OpenClaw smoke:
+
+```bash
+cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
+install -D -m 0644 \
+  .agents/skills/quant-platform-operator/SKILL.md \
+  /home/admin/.openclaw/workspace/skills/quant-platform-operator/SKILL.md
+```
+
+The synced skill must keep the `/status` rule aligned with runtime semantics:
+
+- summarize `/api/status` facts only
+- do not treat `execd.last_seq << last_seq` as an incident by itself
+- treat `degraded|halted` as runtime states that need investigation, not as proof of a broken control plane
 
 ## Run OpenClaw Local Agent Against Platform
 

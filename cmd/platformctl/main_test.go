@@ -86,7 +86,7 @@ func TestRunPromotionRequestPostsRequestAndPrintsResponse(t *testing.T) {
 	os.Stdout = writePipe
 	defer func() { os.Stdout = originalStdout }()
 
-	if err := runPromotion([]string{"request", "-addr", server.URL, "-strategy", "mstr-wave-fib", "-version", "v0.1.0", "-config", "configs/demo-mstr-e2e.yaml"}); err != nil {
+	if err := runPromotion([]string{"request", "-addr", server.URL, "-strategy", "mstr-wave-fib", "-version", "v0.1.0", "-config", "configs/live.yaml"}); err != nil {
 		t.Fatalf("run promotion request: %v", err)
 	}
 	_ = writePipe.Close()
@@ -97,7 +97,7 @@ func TestRunPromotionRequestPostsRequestAndPrintsResponse(t *testing.T) {
 	if gotMethod != http.MethodPost || gotPath != "/api/promotions/request" {
 		t.Fatalf("unexpected request: method=%s path=%s", gotMethod, gotPath)
 	}
-	if gotBody["strategy_id"] != "mstr-wave-fib" || gotBody["version"] != "v0.1.0" || gotBody["config_path"] != "configs/demo-mstr-e2e.yaml" {
+	if gotBody["strategy_id"] != "mstr-wave-fib" || gotBody["version"] != "v0.1.0" || gotBody["config_path"] != "configs/live.yaml" {
 		t.Fatalf("unexpected request body: %+v", gotBody)
 	}
 	if !strings.Contains(string(output), `"state": "backtest_passed"`) {
@@ -343,11 +343,13 @@ func TestRunHistoricalSyncUsesDefaultAllowlistWhenSymbolsOmitted(t *testing.T) {
 func TestRunWatchlistApplyUsesWatchlistForHistoricalAndLive(t *testing.T) {
 	originalLoad := loadWarehouseConfig
 	originalHistorical := runHistoricalSync
+	originalAggregate := runAggregateSync
 	originalWatchlist := loadWatchlistFile
 	originalRuntimeConfig := loadRuntimeConfig
 	defer func() {
 		loadWarehouseConfig = originalLoad
 		runHistoricalSync = originalHistorical
+		runAggregateSync = originalAggregate
 		loadWatchlistFile = originalWatchlist
 		loadRuntimeConfig = originalRuntimeConfig
 	}()
@@ -380,7 +382,7 @@ func TestRunWatchlistApplyUsesWatchlistForHistoricalAndLive(t *testing.T) {
 		if len(request.Symbols) != 2 || request.Symbols[0] != "BTCUSDT" || request.Symbols[1] != "ETHUSDT" {
 			t.Fatalf("unexpected symbols: %+v", request.Symbols)
 		}
-		if len(request.Intervals) != 5 || request.Intervals[0] != "15m" || request.Intervals[4] != "1w" {
+		if len(request.Intervals) != 1 || request.Intervals[0] != "15m" {
 			t.Fatalf("unexpected intervals: %+v", request.Intervals)
 		}
 		if request.HorizonDays != 1095 {
@@ -388,8 +390,22 @@ func TestRunWatchlistApplyUsesWatchlistForHistoricalAndLive(t *testing.T) {
 		}
 		return historicalSyncResult{ArtifactDir: "artifacts/platform/historical-sync/apply"}, nil
 	}
+	aggregateCalled := false
+	runAggregateSync = func(_ context.Context, cfg warehouseConfig, request aggregateRequest) (aggregateResult, error) {
+		aggregateCalled = true
+		if cfg.DSN != "postgres://warehouse" {
+			t.Fatalf("unexpected aggregate cfg: %+v", cfg)
+		}
+		if len(request.Symbols) != 2 || request.Symbols[0] != "BTCUSDT" || request.Symbols[1] != "ETHUSDT" {
+			t.Fatalf("unexpected aggregate symbols: %+v", request.Symbols)
+		}
+		if len(request.Intervals) != 4 || request.Intervals[0] != "1h" || request.Intervals[3] != "1w" {
+			t.Fatalf("unexpected aggregate intervals: %+v", request.Intervals)
+		}
+		return aggregateResult{Datasets: []aggregateDatasetReport{{Symbol: "BTCUSDT", Interval: "1w", RowCount: 145}}}, nil
+	}
 	loadRuntimeConfig = func(path string) (config.Config, *strategybundle.Bundle, error) {
-		if path != "configs/live-bitget.yaml" {
+		if path != "configs/live.yaml" {
 			t.Fatalf("unexpected live config path: %s", path)
 		}
 		return config.Config{
@@ -415,7 +431,7 @@ func TestRunWatchlistApplyUsesWatchlistForHistoricalAndLive(t *testing.T) {
 	os.Stdout = writePipe
 	defer func() { os.Stdout = originalStdout }()
 
-	if err := runWatchlist([]string{"apply", "-watchlist", "configs/platform/watchlist.yaml", "-live-config", "configs/live-bitget.yaml", "-warehouse-config", "configs/platform/warehouse.yaml"}); err != nil {
+	if err := runWatchlist([]string{"apply", "-watchlist", "configs/platform/watchlist.yaml", "-live-config", "configs/live.yaml", "-warehouse-config", "configs/platform/warehouse.yaml"}); err != nil {
 		t.Fatalf("run watchlist apply: %v", err)
 	}
 	_ = writePipe.Close()
@@ -423,7 +439,10 @@ func TestRunWatchlistApplyUsesWatchlistForHistoricalAndLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read stdout: %v", err)
 	}
-	if !strings.Contains(string(output), `"live_symbols": [`) || !strings.Contains(string(output), `"artifact_dir": "artifacts/platform/historical-sync/apply"`) {
+	if !aggregateCalled {
+		t.Fatal("expected watchlist apply to run aggregate sync")
+	}
+	if !strings.Contains(string(output), `"live_symbols": [`) || !strings.Contains(string(output), `"artifact_dir": "artifacts/platform/historical-sync/apply"`) || !strings.Contains(string(output), `"aggregated":`) {
 		t.Fatalf("unexpected stdout: %s", output)
 	}
 }

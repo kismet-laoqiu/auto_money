@@ -18,7 +18,7 @@
 - repo:
   `/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan`
 - runtime SQLite:
-  `var/mstr-e2e-state.db`
+  `var/live-state.db`
 - binaries:
   `bin/platformd`
   `bin/platformctl`
@@ -57,11 +57,11 @@ PATH=/usr/local/go/bin:/usr/bin:/bin go build -o ./bin/execd ./cmd/execd
 
 ## Start platformd
 
-默认配置来自 `configs/demo-mstr-e2e.yaml`，其中 state db 是 `var/mstr-e2e-state.db`。当前这台 ECS 的 `127.0.0.1:8080` 被 SearXNG 占用，operator 入口固定使用 `127.0.0.1:18080`。
+默认配置来自 `configs/live.yaml`，其中 state db 是 `var/live-state.db`。当前这台 ECS 的 `127.0.0.1:8080` 被 SearXNG 占用，operator 入口固定使用 `127.0.0.1:18080`。
 
 ```bash
 cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
-./bin/platformd -config configs/demo-mstr-e2e.yaml -execd-path ./bin/execd -listen 127.0.0.1:18080
+./bin/platformd -config configs/live.yaml -execd-path ./bin/execd -listen 127.0.0.1:18080
 ```
 
 Smoke:
@@ -73,8 +73,8 @@ curl -fsS http://127.0.0.1:18080/health
 ./bin/platformctl positions -addr http://127.0.0.1:18080
 ./bin/platformctl orders -addr http://127.0.0.1:18080 --limit 20
 ./bin/platformctl events -addr http://127.0.0.1:18080 --limit 20
-curl -fsS "http://127.0.0.1:18080/api/bars?config_path=configs/demo-mstr-e2e.yaml&dataset=mstrusdt_demo_replay"
-curl -fsS "http://127.0.0.1:18080/api/features?config_path=configs/demo-mstr-e2e.yaml&dataset=mstrusdt_demo_replay&offset=0"
+curl -fsS "http://127.0.0.1:18080/api/bars?config_path=configs/live.yaml&dataset=btcusdt_live_replay"
+curl -fsS "http://127.0.0.1:18080/api/features?config_path=configs/live.yaml&dataset=btcusdt_live_replay&offset=0"
 ./bin/platformctl backtest run -addr http://127.0.0.1:18080 -config configs/demo-mstr-bundle.yaml
 ./bin/platformctl promotion request -addr http://127.0.0.1:18080 -strategy mstr-wave-fib -version v0.1.2 -config configs/demo-mstr-bundle.yaml
 ```
@@ -129,7 +129,7 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_ALERT_CHAT_ID=...
 DINGTALK_WEBHOOK=...
 DINGTALK_SECRET=...
-./bin/notifierd -config configs/demo-mstr-e2e.yaml
+./bin/notifierd -config configs/live.yaml
 ```
 
 一次性消费现有事件并退出：
@@ -152,7 +152,7 @@ cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
 BITGET_API_KEY=...
 BITGET_API_SECRET=...
 BITGET_PASSPHRASE=...
-./bin/execd -config configs/demo-mstr-e2e.yaml
+./bin/execd -config configs/live.yaml
 ```
 
 一次性消费当前 intent 并退出：
@@ -162,7 +162,7 @@ cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
 BITGET_API_KEY=...
 BITGET_API_SECRET=...
 BITGET_PASSPHRASE=...
-./bin/execd -config configs/demo-mstr-e2e.yaml -once
+./bin/execd -config configs/live.yaml -once
 ```
 
 主动平仓收尾：
@@ -172,7 +172,7 @@ cd /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
 BITGET_API_KEY=...
 BITGET_API_SECRET=...
 BITGET_PASSPHRASE=...
-./bin/execd -config configs/demo-mstr-e2e.yaml -flatten-symbol MSTRUSDT
+./bin/execd -config configs/live.yaml -flatten-symbol MSTRUSDT
 ```
 
 ## Event Kinds notifierd Currently Handles
@@ -221,13 +221,14 @@ BITGET_PASSPHRASE=...
 - `/backtest` Telegram reply 已改成 Telegram-safe summary，避免 `Bad Request: message is too long`。回归测试：`go test ./internal/platform/notifier -run TestCommandRuntimeRepliesToBacktestWithTelegramSafeSummary -count=1 -v`。
 - `platformctl` 已提供 `strategy versions`、`historical sync`、`aggregate`、`export parquet`、`live flatten`、`warehouse health` 等 control-plane 命令；`platformd` 也已提供 `/api/strategies/versions` 与 `/api/live/flatten`。
 - Codex / Claude / OpenClaw skill smoke 已可运行；`scripts/run_platform_skill_smoke.sh` 当前会额外保存 OpenClaw raw log，并提取结构化 JSON artifact。
-- 当前运行态仍存在一个 operator 风险：`platformctl status` 持续显示 `execd` cursor 停在 `2059`，`trader.arming_state=degraded`，这属于运行态排查项，不是功能缺项。
+- `platformctl status` 的 `last_seq` 是全局 `event_log` 最大序列；`execd` 只消费 `trader` source 的 `entry.intent.created`，因此 `execd.last_seq` 不会追平市场行情主导的全局 `last_seq`。不要把这个 gap 本身误判成事故。
+- `trader.arming_state=degraded|halted` 需要按 runtime 事实排查，但它本身不等于“平台功能未完成”。
 
 ## 2026-03-30 Supplement
 
 - `notifierd` 的 systemd `ExecStart` 已固定 `-health-addr 127.0.0.1:18081`；fresh `curl -fsS http://127.0.0.1:18081/health` 返回 `ok=true`，并包含 `telegram_command.enabled=true` 与 `daily_summary.location_name=Asia/Shanghai`。
 - Telegram poll 的 transient `409 / timeout` 已在 runtime 中改为 retry + backoff，不再把 poll error 当 fatal error 直接退出进程。fresh systemd 状态为 `ActiveState=active`、`SubState=running`。
-- `2026-03-30 10:48 CST` 真实 Telegram direct chat `/status`、`/positions`、`/backtest mstr-wave-fib v0.1.2` 已通过；复核命令：`sqlite3 -header -column var/mstr-e2e-state.db "select * from consumer_cursor where consumer_key='telegram.command';"` 与 `curl -fsS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getUpdates?timeout=1" | jq '.'`。
+- `2026-03-30 10:48 CST` 真实 Telegram direct chat `/status`、`/positions`、`/backtest mstr-wave-fib v0.1.2` 已通过；复核命令：`sqlite3 -header -column var/live-state.db "select * from consumer_cursor where consumer_key='telegram.command';"` 与 `curl -fsS "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getUpdates?timeout=1" | jq '.'`。
 - `researchd` 的 systemd oneshot 入口已经实装，启动前必须准备 `/etc/quantlab/researchd/default.env`，当前已验证的内容是：
   - `RESEARCHD_ARGS=--kind nightly_report --strategy mstr-wave-fib --config-path configs/demo-mstr-bundle.yaml --datasets MSTRUSDT:1h,BTCUSDT:1h`
 - 当前固定启动顺序：

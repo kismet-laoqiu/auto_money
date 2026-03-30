@@ -21,7 +21,7 @@ import (
 
 func main() {
 	fs := flag.NewFlagSet("mcpd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-mstr-e2e.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	stateDBPath := fs.String("state-db", "", "override sqlite state db path")
 	execdPath := fs.String("execd-path", "./execd", "execd binary path for live ops")
 	writeToken := fs.String("write-token", "", "write auth token for quant_write tools")

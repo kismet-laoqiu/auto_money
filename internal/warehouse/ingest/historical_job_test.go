@@ -99,7 +99,7 @@ func TestHistoricalJobSyncCapturesRequestMetadata(t *testing.T) {
 	}
 }
 
-func TestHistoricalJobSyncBackfillsUntilHorizon(t *testing.T) {
+func TestHistoricalJobSyncReusesEarliestBarAsNextPageCursor(t *testing.T) {
 	pageOne := []core.Bar{
 		{Time: time.Date(2025, 9, 29, 0, 0, 0, 0, time.UTC), Close: 1},
 		{Time: time.Date(2026, 3, 28, 0, 0, 0, 0, time.UTC), Close: 2},
@@ -136,8 +136,8 @@ func TestHistoricalJobSyncBackfillsUntilHorizon(t *testing.T) {
 	if !fetcher.specs[0].StartTime.Equal(time.Date(2025, 3, 29, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("unexpected start time: %s", fetcher.specs[0].StartTime)
 	}
-	if !fetcher.specs[1].EndTime.Before(pageOne[0].Time) {
-		t.Fatalf("expected second page cursor before first page earliest, got %s", fetcher.specs[1].EndTime)
+	if !fetcher.specs[1].EndTime.Equal(pageOne[0].Time) {
+		t.Fatalf("expected second page cursor to reuse first page earliest, got %s", fetcher.specs[1].EndTime)
 	}
 	if len(store.lastBars) != 4 {
 		t.Fatalf("unexpected stored bars: %+v", store.lastBars)

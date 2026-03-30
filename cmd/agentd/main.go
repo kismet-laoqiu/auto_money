@@ -42,7 +42,7 @@ func runCompatWithRunner(args []string, runner researchRunner) error {
 	}
 	fs := flag.NewFlagSet("agentd", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	configPath := fs.String("config", "configs/demo-bitget.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	kind := fs.String("kind", string(platformjobs.KindNightlyReport), "research job kind")
 	strategyID := fs.String("strategy", "", "strategy id")
 	subject := fs.String("subject", "", "job subject")

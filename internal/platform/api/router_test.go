@@ -204,7 +204,7 @@ func TestRouterBacktestRunEndpoint(t *testing.T) {
 func TestRouterBarsEndpoint(t *testing.T) {
 	store := newTestStore(t)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/bars?config_path=configs/demo-mstr-e2e.yaml&dataset=mstr_demo", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/bars?config_path=configs/live.yaml&dataset=mstr_demo", nil)
 
 	NewHandler(HandlerConfig{
 		Store: store,
@@ -231,7 +231,7 @@ func TestRouterBarsEndpoint(t *testing.T) {
 func TestRouterFeaturesEndpoint(t *testing.T) {
 	store := newTestStore(t)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/features?config_path=configs/demo-mstr-e2e.yaml&dataset=mstr_demo&offset=0", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/features?config_path=configs/live.yaml&dataset=mstr_demo&offset=0", nil)
 
 	NewHandler(HandlerConfig{
 		Store: store,
@@ -258,7 +258,7 @@ func TestRouterFeaturesEndpoint(t *testing.T) {
 func TestRouterPromotionRequestEndpoint(t *testing.T) {
 	store := newTestStore(t)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/promotions/request", strings.NewReader(`{"strategy_id":"mstr-wave-fib","version":"v0.1.0","config_path":"configs/demo-mstr-e2e.yaml"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/promotions/request", strings.NewReader(`{"strategy_id":"mstr-wave-fib","version":"v0.1.0","config_path":"configs/live.yaml"}`))
 	request.Header.Set("Content-Type", "application/json")
 
 	NewHandler(HandlerConfig{
@@ -301,7 +301,7 @@ func TestRouterStrategyVersionsEndpoint(t *testing.T) {
 					ID:             "promo-2",
 					StrategyID:     "mstr-wave-fib",
 					Version:        "v0.1.1",
-					ConfigPath:     "configs/demo-mstr-e2e.yaml",
+						ConfigPath:     "configs/live.yaml",
 					State:          promotion.StateShadowPassed,
 					ObjectiveScore: 0.81,
 					FinalScore:     0.83,
@@ -311,7 +311,7 @@ func TestRouterStrategyVersionsEndpoint(t *testing.T) {
 					ID:             "promo-1",
 					StrategyID:     "mstr-wave-fib",
 					Version:        "v0.1.0",
-					ConfigPath:     "configs/demo-mstr-e2e.yaml",
+						ConfigPath:     "configs/live.yaml",
 					State:          promotion.StateBacktestPassed,
 					ObjectiveScore: 0.79,
 					FinalScore:     0.8,
@@ -504,7 +504,7 @@ func TestRouterStrategyVersionsEndpointIncludesRegistryEntriesWithoutPromotion(t
 				ID:             "promo-1",
 				StrategyID:     "mstr-wave-fib",
 				Version:        "v0.1.0",
-				ConfigPath:     "configs/demo-mstr-e2e.yaml",
+				ConfigPath:     "configs/live.yaml",
 				State:          promotion.StateBacktestPassed,
 				ObjectiveScore: 0.79,
 				FinalScore:     0.8,

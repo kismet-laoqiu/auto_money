@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -80,7 +81,7 @@ var newWarehouseStore = func(db warehouseDB) warehouseBarStore {
 
 func main() {
 	fs := flag.NewFlagSet("marketd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-bitget.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -263,6 +264,9 @@ func appendWarehouseBar(store warehouseBarStore, provider string, productType st
 			Close:  bar.Close,
 			Volume: bar.Volume,
 		}})
+		if err != nil && ctx.Err() != nil && errors.Is(err, sql.ErrTxDone) {
+			return 0, ctx.Err()
+		}
 		return int64(inserted), err
 	}
 }

@@ -28,13 +28,16 @@ func TestLoadLiveConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestLoadMSTRE2EConfig(t *testing.T) {
-	cfg, err := Load("../../configs/demo-mstr-e2e.yaml")
+func TestLoadLiveConfig(t *testing.T) {
+	cfg, err := Load("../../configs/live.yaml")
 	if err != nil {
-		t.Fatalf("load mstr e2e config: %v", err)
+		t.Fatalf("load live config: %v", err)
 	}
-	if len(cfg.Live.Exchange.Symbols) != 1 || cfg.Live.Exchange.Symbols[0].Symbol != "MSTRUSDT" {
-		t.Fatalf("unexpected live symbols: %+v", cfg.Live.Exchange.Symbols)
+	if cfg.WatchlistPath != "platform/watchlist.yaml" {
+		t.Fatalf("unexpected watchlist path: %s", cfg.WatchlistPath)
+	}
+	if cfg.WarehouseConfigPath != "platform/warehouse.yaml" {
+		t.Fatalf("unexpected warehouse config path: %s", cfg.WarehouseConfigPath)
 	}
 	if cfg.Live.Exchange.ProductType != "USDT-FUTURES" {
 		t.Fatalf("unexpected product type: %s", cfg.Live.Exchange.ProductType)
@@ -46,7 +49,7 @@ func TestLoadMSTRE2EConfig(t *testing.T) {
 		t.Fatalf("unexpected credential envs: %+v", cfg.Live.Exchange)
 	}
 	if !cfg.Live.Runtime.ObserveOnly {
-		t.Fatalf("mstr e2e config must default to observe_only")
+		t.Fatalf("live config must default to observe_only")
 	}
 	if cfg.Live.Risk.MaxLeverage != 3 {
 		t.Fatalf("unexpected leverage cap: %d", cfg.Live.Risk.MaxLeverage)

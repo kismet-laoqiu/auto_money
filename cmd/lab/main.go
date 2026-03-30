@@ -99,7 +99,7 @@ func runEvalWithRunner(args []string, runner evalRunner) error {
 
 func runReplay(args []string) error {
 	fs := flag.NewFlagSet("replay", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-bitget.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	refresh := fs.Bool("refresh", false, "refresh remote data")
 	pretty := fs.Bool("pretty", true, "pretty print json")
 	if err := fs.Parse(args); err != nil {

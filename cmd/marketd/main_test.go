@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 	"time"
 
@@ -38,9 +39,13 @@ func (store *liveStoreStub) AppendEvent(_ context.Context, source string, evt sq
 type warehouseStoreStub struct {
 	specs []config.DatasetConfig
 	bars  [][]core.Bar
+	err   error
 }
 
 func (store *warehouseStoreStub) UpsertBars(_ context.Context, spec config.DatasetConfig, bars []core.Bar) (int, error) {
+	if store.err != nil {
+		return 0, store.err
+	}
 	store.specs = append(store.specs, spec)
 	store.bars = append(store.bars, append([]core.Bar(nil), bars...))
 	return len(bars), nil
@@ -230,5 +235,27 @@ func TestRunStartsWarehouseRuntimesFromWatchlistIntervals(t *testing.T) {
 	}
 	if len(liveStore.records) != 1 {
 		t.Fatalf("warehouse runtime must not write sqlite events: %+v", liveStore.records)
+	}
+}
+
+func TestAppendWarehouseBarTreatsCanceledTxDoneAsContextCanceled(t *testing.T) {
+	store := &warehouseStoreStub{err: sql.ErrTxDone}
+	appendFn := appendWarehouseBar(store, "bitget", "USDT-FUTURES", "BTCUSDT", "15m")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := appendFn(ctx, "market.public", market.BarClosedEvent{
+		EventIDValue: "warehouse-bar",
+		SymbolValue:  "BTCUSDT",
+		Interval:     "15m",
+		Ts:           time.Unix(1710000900, 0).UTC(),
+		Open:         110,
+		High:         112,
+		Low:          109,
+		Close:        111,
+		Volume:       18,
+	}, nil)
+	if err != context.Canceled {
+		t.Fatalf("expected context canceled, got %v", err)
 	}
 }

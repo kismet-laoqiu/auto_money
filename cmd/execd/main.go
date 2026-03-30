@@ -16,7 +16,7 @@ import (
 
 func main() {
 	fs := flag.NewFlagSet("execd", flag.ContinueOnError)
-	configPath := fs.String("config", "configs/demo-mstr-e2e.yaml", "config file")
+	configPath := fs.String("config", "configs/live.yaml", "config file")
 	stateDBPath := fs.String("state-db", "", "override sqlite state db path")
 	once := fs.Bool("once", false, "process currently available intents and exit")
 	flattenSymbol := fs.String("flatten-symbol", "", "close current position for symbol and exit")

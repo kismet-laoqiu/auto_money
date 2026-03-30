@@ -109,11 +109,26 @@ func bitgetMixEndpoint(spec config.DatasetConfig, granularity string, limit int)
 			limit = 200
 		}
 		params.Set("limit", strconv.Itoa(limit))
-		if !spec.StartTime.IsZero() && (spec.EndTime.IsZero() || spec.EndTime.Sub(spec.StartTime) <= 90*24*time.Hour) {
-			params.Set("startTime", strconv.FormatInt(spec.StartTime.UTC().UnixMilli(), 10))
+		startTime := spec.StartTime.UTC()
+		endTime := spec.EndTime.UTC()
+		maxWindow := 90 * 24 * time.Hour
+		if startTime.IsZero() && !endTime.IsZero() {
+			startTime = endTime.Add(-maxWindow)
 		}
-		if !spec.EndTime.IsZero() {
-			params.Set("endTime", strconv.FormatInt(spec.EndTime.UTC().UnixMilli(), 10))
+		if !startTime.IsZero() && endTime.IsZero() {
+			endTime = startTime.Add(maxWindow)
+		}
+		if !startTime.IsZero() && !endTime.IsZero() && endTime.Sub(startTime) > maxWindow {
+			startTime = endTime.Add(-maxWindow)
+			if !spec.StartTime.IsZero() && startTime.Before(spec.StartTime.UTC()) {
+				startTime = spec.StartTime.UTC()
+			}
+		}
+		if !startTime.IsZero() {
+			params.Set("startTime", strconv.FormatInt(startTime.UnixMilli(), 10))
+		}
+		if !endTime.IsZero() {
+			params.Set("endTime", strconv.FormatInt(endTime.UnixMilli(), 10))
 		}
 		return "https://api.bitget.com/api/v2/mix/market/history-candles?" + params.Encode()
 	}

@@ -17,8 +17,8 @@ func TestServiceFlattenSymbolRunsExecdAndReadsBackFlatPosition(t *testing.T) {
 	}
 	service := NewService(Config{
 		ExecdPath:      "/tmp/quantlab-execd",
-		ConfigPath:     "configs/demo-mstr-e2e.yaml",
-		StateDBPath:    "var/mstr-e2e-state.db",
+			ConfigPath:     "configs/live.yaml",
+			StateDBPath:    "var/live-state.db",
 		ProductType:    "USDT-FUTURES",
 		MarginCoin:     "USDT",
 		AllowedSymbols: []string{"MSTRUSDT"},
@@ -31,7 +31,7 @@ func TestServiceFlattenSymbolRunsExecdAndReadsBackFlatPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("flatten symbol: %v", err)
 	}
-	if !reflect.DeepEqual(runner.args, []string{"-config", "configs/demo-mstr-e2e.yaml", "-state-db", "var/mstr-e2e-state.db", "-flatten-symbol", "MSTRUSDT"}) {
+	if !reflect.DeepEqual(runner.args, []string{"-config", "configs/live.yaml", "-state-db", "var/live-state.db", "-flatten-symbol", "MSTRUSDT"}) {
 		t.Fatalf("unexpected runner args: %+v", runner.args)
 	}
 	if reader.symbol != "MSTRUSDT" || reader.productType != "USDT-FUTURES" || reader.marginCoin != "USDT" {
@@ -87,8 +87,8 @@ func (reader *readerStub) FetchSinglePosition(_ context.Context, symbol, product
 func TestServiceFlattenSymbolReturnsRunnerFailure(t *testing.T) {
 	service := NewService(Config{
 		ExecdPath:      "/tmp/quantlab-execd",
-		ConfigPath:     "configs/demo-mstr-e2e.yaml",
-		StateDBPath:    "var/mstr-e2e-state.db",
+			ConfigPath:     "configs/live.yaml",
+			StateDBPath:    "var/live-state.db",
 		ProductType:    "USDT-FUTURES",
 		MarginCoin:     "USDT",
 		AllowedSymbols: []string{"MSTRUSDT"},
