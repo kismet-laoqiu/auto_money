@@ -51,3 +51,25 @@
 - Strategy bundle authoring：`docs/ops/strategy-bundle-authoring.md`
 - Promotion governance：`docs/ops/promotion-governance.md`
 - Codex / Claude integration：`docs/ops/codex-claude-integration.md`
+
+## Repo Workflow Skills
+
+当前 repo-local workflow skill pack 分成两层：
+
+- orchestration:
+  - `.agents/skills/quant-workflow/SKILL.md`
+- child skills:
+  - `.agents/skills/quant-plan/SKILL.md`
+  - `.agents/skills/quant-plan-review/SKILL.md`
+  - `.agents/skills/quant-coding/SKILL.md`
+  - `.agents/skills/quant-code-review/SKILL.md`
+  - `.agents/skills/quant-test/SKILL.md`
+  - `.agents/skills/quant-changelog/SKILL.md`
+  - `.agents/skills/quant-docs/SKILL.md`
+  - `.agents/skills/quant-retrospective/SKILL.md`
+
+它们的共同约束是：
+
+- 代码工作发生在当前远端 repo
+- durable docs 以 controller `workspace/` 为 canonical root；若不可见，则回退到 repo mirror `workspace/`
+- completion 之前必须回写 `core.md`、说明、架构、接口、通知/机器人五份根级文档

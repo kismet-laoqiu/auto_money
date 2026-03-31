@@ -17,3 +17,6 @@ run.log
 /execd
 /mcpd
 /researchd
+workspace/
+.commit-history/
+deploy/systemd/*.bak-*

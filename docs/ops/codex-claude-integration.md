@@ -4,12 +4,27 @@
 
 当前仓库已经提供以下 repo-local skills：
 
+- `.agents/skills/quant-workflow/SKILL.md`
+- `.agents/skills/quant-plan/SKILL.md`
+- `.agents/skills/quant-plan-review/SKILL.md`
+- `.agents/skills/quant-coding/SKILL.md`
+- `.agents/skills/quant-code-review/SKILL.md`
+- `.agents/skills/quant-test/SKILL.md`
+- `.agents/skills/quant-changelog/SKILL.md`
+- `.agents/skills/quant-docs/SKILL.md`
+- `.agents/skills/quant-retrospective/SKILL.md`
 - `.agents/skills/quant-platform-operator/SKILL.md`
 - `.agents/skills/quant-theory-study/SKILL.md`
 - `.agents/skills/quant-backtest-compare/SKILL.md`
 - `.agents/skills/quant-promotion/SKILL.md`
 
 这些 skill 只描述触发条件与控制面 workflow，不授予任何 exchange 直写权限。
+
+其中：
+
+- `quant-workflow` 负责长时间执行时的 phase / gate / resume
+- `quant-test` 明确要求 proof test + real verification + impact safety
+- `quant-docs` 要求 completion 前同步 durable docs
 
 ## 已验证 Research 入口
 
@@ -53,6 +68,24 @@ go run ./cmd/platformctl research run \
   "Use quant-platform-operator. Inspect platform status and strategy versions. Do not edit files."
 ```
 
+workflow 样例：
+
+```bash
+/usr/bin/codex exec \
+  --dangerously-bypass-approvals-and-sandbox \
+  -C /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan \
+  "Use quant-workflow. Explain the resume order, stage gates, and durable docs required before completion. Do not edit files."
+```
+
+testing 规则样例：
+
+```bash
+/usr/bin/codex exec \
+  --dangerously-bypass-approvals-and-sandbox \
+  -C /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan \
+  "Use quant-test. For a change touching execd, summarize the proof-test gate, the real-verification gate, and the impact-safety gate only. Do not edit files."
+```
+
 研究样例：
 
 ```bash
@@ -91,3 +124,4 @@ go run ./cmd/platformctl research run \
 - promotion 只通过 `platformctl promotion ...` 推进。
 - emergency flatten 只通过 `platformctl live flatten`。
 - AI 不应直接触碰 Bitget 写接口或 runtime SQLite 状态文件。
+- 长时间 workflow completion 前必须同步 durable docs，而不是只改代码。
