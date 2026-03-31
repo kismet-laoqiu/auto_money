@@ -11,13 +11,18 @@ This is the strong-state orchestrator for this repository. It manages workspace 
 
 ## Workspace Roots
 
+- Primary controller skill install:
+  `/Users/qiukeming/.codex/skills/quant-*/SKILL.md`
 - Controller canonical workspace root:
   `/Users/qiukeming/Documents/projects/ob/obsidian/ecs/workspace`
+- Repo mirror skill/runtime root:
+  `/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/.agents/skills/quant-*/SKILL.md`
 - Repo-local mirror workspace root:
   `workspace/`
 
 Rules:
 
+- Keep the `quant-*` skill pack on both sides. The controller Mac install is the default entry; the repo mirror exists for direct-on-ECS development and remote `codex exec` / OpenClaw discovery.
 - If the controller root exists in the current environment, it is the truth source for durable docs and run workspaces.
 - If the controller root does not exist, use the repo-local mirror `workspace/` and keep the same filenames and structure.
 

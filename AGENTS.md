@@ -204,6 +204,20 @@ completion gate：
 - 每次 workflow 结束前，上面五份根级 durable docs 都必须更新到终态
 - `workspace/runs/...` 下的 `status.md / execution-log.md / 测试记录.md / 测试报告.md / changelog.md / insights.md` 只代表本次执行，不取代根级 durable docs
 
+## Quant Workflow Skill Placement
+
+`quant-*` skill 必须双端保留：
+
+- Mac controller 主安装目录：`/Users/qiukeming/.codex/skills/quant-*/SKILL.md`
+- ECS repo mirror：`/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/.agents/skills/quant-*/SKILL.md`
+
+规则：
+
+- 日常主控开发默认以 Mac controller skill 为入口
+- 如果直接在 ECS 上开发，或需要远端 `codex exec` / OpenClaw 直接发现 skill，则使用 repo mirror
+- 任何新增或修改 `quant-*` skill 的任务，结束前都必须同步校验这两侧文件存在且语义一致
+- 不要再把“远端 repo 已有 skill”误当成“Mac controller 已经装好了同一套 skill”
+
 ## Quant Workflow Resume Order
 
 如果通过 `quant-workflow` 恢复上下文，固定顺序必须是：
