@@ -249,15 +249,20 @@ completion gate：
 
 `quant-*` skill 必须双端保留：
 
-- Mac controller 主安装目录：`/Users/qiukeming/.codex/skills/quant-*/SKILL.md`
+- controller canonical 项目路径：`/Users/qiukeming/Documents/projects/ob/obsidian/ecs/.agents/skills/quant-*/SKILL.md`
 - ECS repo mirror：`/root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan/.agents/skills/quant-*/SKILL.md`
+
+过渡兼容：
+
+- `/Users/qiukeming/.codex/skills/quant-*/SKILL.md` 可以暂时保留为兼容副本，但它不再是 controller 真相源
 
 规则：
 
-- 日常主控开发默认以 Mac controller skill 为入口
+- 日常主控开发默认以当前项目 `.agents/skills` 为入口
 - 如果直接在 ECS 上开发，或需要远端 `codex exec` / OpenClaw 直接发现 skill，则使用 repo mirror
-- 任何新增或修改 `quant-*` skill 的任务，结束前都必须同步校验这两侧文件存在且语义一致
-- 不要再把“远端 repo 已有 skill”误当成“Mac controller 已经装好了同一套 skill”
+- 任何新增或修改 `quant-*` skill 的任务，结束前都必须同步校验 controller canonical 项目路径与 ECS repo mirror 两侧文件存在且语义一致
+- 如果仍保留 `~/.codex/skills/quant-*` 兼容副本，也必须保持与 controller canonical 项目路径不矛盾
+- 不要再把“`~/.codex` 已有 skill”或“远端 repo 已有 skill”误当成“当前项目 `.agents/skills` 已经装好了同一套 skill”
 
 ## Quant Workflow Resume Order
 
