@@ -218,7 +218,7 @@ func (service *Service) evaluateSymbol(ctx context.Context, file watchlist.File,
 			VolumeZScore:   anomaly.VolumeZScore,
 			BarTime:        bar.Time.UTC(),
 		}
-		title, summary := marketAlertTitleSummary(symbol, anomaly)
+		title, summary, details := marketAlertNotification(symbol, bar, anomaly, daily.Features)
 		event := Event{
 			EventIDValue: fmt.Sprintf("insight:market_alert:%s:%s:%d:%s", symbol, service.cfg.Insights.Anomaly.Interval, bar.Time.UTC().Unix(), anomaly.Signal),
 			SymbolValue:  symbol,
@@ -227,13 +227,9 @@ func (service *Service) evaluateSymbol(ctx context.Context, file watchlist.File,
 			Interval:     service.cfg.Insights.Anomaly.Interval,
 			Title:        title,
 			Summary:      summary,
-			Details: []string{
-				fmt.Sprintf("move_pct=%.2f move_threshold=%.2f", anomaly.MovePct, anomaly.MoveLimit),
-				fmt.Sprintf("volume=%.4f volume_threshold=%.4f", anomaly.Volume, anomaly.VolumeLimit),
-				fmt.Sprintf("volume_ratio=%.2f volume_zscore=%.2f", anomaly.VolumeRatio, anomaly.VolumeZScore),
-			},
-			Signal:    anomaly.Signal,
-			Threshold: maxFloat(anomaly.MoveLimit, anomaly.VolumeLimit),
+			Details:      details,
+			Signal:       anomaly.Signal,
+			Threshold:    maxFloat(anomaly.MoveLimit, anomaly.VolumeLimit),
 		}
 		alerts = append(alerts, event)
 	}
@@ -455,24 +451,79 @@ func featureSnapshot(features core.FeatureSet) FeatureSnapshot {
 	}
 }
 
-func marketAlertTitleSummary(symbol string, anomaly AnomalyAnalysis) (string, string) {
+func marketAlertNotification(symbol string, bar core.Bar, anomaly AnomalyAnalysis, features core.FeatureSet) (string, string, []string) {
+	title := marketAlertTitle(symbol, bar, anomaly)
+	summary := marketAlertSummary(bar, anomaly)
+	details := []string{
+		fmt.Sprintf("成交量 %.4f（阈值 %.4f）", anomaly.Volume, anomaly.VolumeLimit),
+		fmt.Sprintf("日线背景：%s趋势，RSI14 %.2f", marketAlertTrendLabel(features), features.Trigger.RSI14),
+	}
+	return title, summary, details
+}
+
+func marketAlertTitle(symbol string, bar core.Bar, anomaly AnomalyAnalysis) string {
 	switch anomaly.Signal {
 	case MarketAlertCombo:
-		direction := "异动"
-		if anomaly.MovePct > 0 {
-			direction = "异动放量"
+		direction := "放量上涨"
+		if bar.Close < bar.Open {
+			direction = "放量下跌"
 		}
-		return fmt.Sprintf("%s 15m %s", symbol, direction),
-			fmt.Sprintf("move_pct=%.2f volume_ratio=%.2f volume_zscore=%.2f", anomaly.MovePct, anomaly.VolumeRatio, anomaly.VolumeZScore)
+		return fmt.Sprintf("%s 15m %s", symbol, direction)
 	case MarketAlertSurge:
-		return fmt.Sprintf("%s 15m 暴涨", symbol),
-			fmt.Sprintf("move_pct=%.2f threshold=%.2f", anomaly.MovePct, anomaly.MoveLimit)
+		return fmt.Sprintf("%s 15m 暴涨", symbol)
 	case MarketAlertDump:
-		return fmt.Sprintf("%s 15m 暴跌", symbol),
-			fmt.Sprintf("move_pct=%.2f threshold=%.2f", anomaly.MovePct, anomaly.MoveLimit)
+		return fmt.Sprintf("%s 15m 暴跌", symbol)
 	default:
-		return fmt.Sprintf("%s 15m 异常放量", symbol),
-			fmt.Sprintf("volume_ratio=%.2f volume_zscore=%.2f", anomaly.VolumeRatio, anomaly.VolumeZScore)
+		return fmt.Sprintf("%s 15m 异常放量", symbol)
+	}
+}
+
+func marketAlertSummary(bar core.Bar, anomaly AnomalyAnalysis) string {
+	switch anomaly.Signal {
+	case MarketAlertCombo:
+		return fmt.Sprintf(
+			"现价 %.4f，15m %s %.2f%%（阈值 %.2f%%），成交量放大到基线 %.2f 倍",
+			bar.Close,
+			marketAlertMoveLabel(bar),
+			anomaly.MovePct,
+			anomaly.MoveLimit,
+			anomaly.VolumeRatio,
+		)
+	case MarketAlertSurge, MarketAlertDump:
+		return fmt.Sprintf(
+			"现价 %.4f，15m %s %.2f%%（阈值 %.2f%%）",
+			bar.Close,
+			marketAlertMoveLabel(bar),
+			anomaly.MovePct,
+			anomaly.MoveLimit,
+		)
+	default:
+		return fmt.Sprintf(
+			"现价 %.4f，15m 波动 %.2f%%，成交量放大到基线 %.2f 倍",
+			bar.Close,
+			anomaly.MovePct,
+			anomaly.VolumeRatio,
+		)
+	}
+}
+
+func marketAlertMoveLabel(bar core.Bar) string {
+	if bar.Close < bar.Open {
+		return "跌幅"
+	}
+	return "涨幅"
+}
+
+func marketAlertTrendLabel(features core.FeatureSet) string {
+	switch {
+	case features.Regime.TrendUpFlag:
+		return "上涨"
+	case features.Regime.TrendDownFlag:
+		return "下跌"
+	case features.Regime.RangeFlag:
+		return "震荡"
+	default:
+		return "中性"
 	}
 }
 

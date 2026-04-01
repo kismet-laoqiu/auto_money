@@ -53,10 +53,10 @@ func TestNotificationRenderSnapshots(t *testing.T) {
 			notification: Notification{
 				Kind:    KindMarketAlert,
 				Title:   "BTCUSDT 15m 暴涨",
-				Summary: "move_pct=4.81 threshold=3.25",
-				Details: []string{"volume_ratio=4.20 volume_zscore=5.12"},
+				Summary: "现价 81234.1000，15m 涨幅 4.81%（阈值 3.25%）",
+				Details: []string{"成交量 4200.0000（阈值 1000.0000）", "日线背景：上涨趋势，RSI14 62.30"},
 			},
-			want: "市场异动\nBTCUSDT 15m 暴涨\nmove_pct=4.81 threshold=3.25\nvolume_ratio=4.20 volume_zscore=5.12",
+			want: "市场异动\nBTCUSDT 15m 暴涨\n现价 81234.1000，15m 涨幅 4.81%（阈值 3.25%）\n成交量 4200.0000（阈值 1000.0000）\n日线背景：上涨趋势，RSI14 62.30",
 		},
 	}
 	for _, tc := range cases {

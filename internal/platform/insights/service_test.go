@@ -90,7 +90,10 @@ func TestServiceDetectAlertsTriggersVolumeSpike(t *testing.T) {
 		},
 		EvaluateSignal: func(_ []core.Bar, _ int, _ config.StrategyConfig) core.Signal { return core.Signal{Side: core.Flat} },
 		ExtractFeatures: func(_ []core.Bar, _ int, _ config.StrategyConfig) core.FeatureSet {
-			return core.FeatureSet{}
+			return core.FeatureSet{
+				Trigger: core.PriceActionTriggerFeatures{RSI14: 61.4},
+				Regime:  core.RegimeTags{TrendUpFlag: true},
+			}
 		},
 	})
 
@@ -103,6 +106,87 @@ func TestServiceDetectAlertsTriggersVolumeSpike(t *testing.T) {
 	}
 	if alerts[0].Signal != MarketAlertVolumeSpike {
 		t.Fatalf("unexpected volume alert: %+v", alerts[0])
+	}
+	if alerts[0].Title != "BTCUSDT 15m 异常放量" {
+		t.Fatalf("unexpected title: %q", alerts[0].Title)
+	}
+	if alerts[0].Summary != "现价 129.2000，15m 波动 0.16%，成交量放大到基线 16.00 倍" {
+		t.Fatalf("unexpected summary: %q", alerts[0].Summary)
+	}
+	wantDetails := []string{
+		"成交量 160.0000（阈值 100.0000）",
+		"日线背景：上涨趋势，RSI14 61.40",
+	}
+	if len(alerts[0].Details) != len(wantDetails) {
+		t.Fatalf("unexpected details: %+v", alerts[0].Details)
+	}
+	for i, want := range wantDetails {
+		if alerts[0].Details[i] != want {
+			t.Fatalf("unexpected detail[%d]: want %q, got %q", i, want, alerts[0].Details[i])
+		}
+	}
+}
+
+func TestServiceDetectAlertsTriggersSurgeReadableSummary(t *testing.T) {
+	bars := buildBars(30, time.Unix(1710000000, 0).UTC(), 15*time.Minute, 100, 10)
+	bars[len(bars)-1].Close = 132.87
+	bars[len(bars)-1].High = 133.10
+	store := &storeStub{
+		bars: map[string][]core.Bar{
+			"bitget:BTCUSDT:1d":  buildBars(16, time.Unix(1710000000, 0).UTC(), time.Hour*24, 100, 10),
+			"bitget:BTCUSDT:15m": bars,
+		},
+		thresholds: map[string]AnomalyThresholds{
+			"bitget:BTCUSDT:15m": {MovePct: 2.5, Volume: 1000},
+		},
+	}
+	service := NewService(Config{
+		WatchlistPath: "configs/platform/watchlist.yaml",
+		Strategy:      config.StrategyConfig{FastSMA: 2, SlowSMA: 3, ATRWindow: 2, LevelLookback: 2, PivotWindow: 1},
+		Insights: config.InsightsConfig{
+			DailySignal: config.DailySignalAlertConfig{Interval: "1d", LookbackBars: 16, MinScore: 100, ScoreQuantile: 0.99, CooldownBars: 2},
+			Anomaly:     config.AnomalyAlertConfig{Interval: "15m", RollingWindow: 20, CooldownBars: 4, MinMovePct: 2.5, MinVolumeRatio: 30, MinVolumeZScore: 30},
+		},
+		Store: store,
+		LoadWatchlist: func(string) (watchlist.File, error) {
+			return watchlist.File{Provider: "bitget", ProductType: "USDT-FUTURES", Symbols: []config.LiveSymbolConfig{{Symbol: "BTCUSDT"}}}, nil
+		},
+		EvaluateSignal: func(_ []core.Bar, _ int, _ config.StrategyConfig) core.Signal { return core.Signal{Side: core.Flat} },
+		ExtractFeatures: func(_ []core.Bar, _ int, _ config.StrategyConfig) core.FeatureSet {
+			return core.FeatureSet{
+				Trigger: core.PriceActionTriggerFeatures{RSI14: 58.2},
+				Regime:  core.RegimeTags{TrendUpFlag: true},
+			}
+		},
+	})
+
+	alerts, err := service.DetectAlerts(context.Background())
+	if err != nil {
+		t.Fatalf("detect alerts: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("expected one alert, got %+v", alerts)
+	}
+	if alerts[0].Signal != MarketAlertSurge {
+		t.Fatalf("unexpected surge alert: %+v", alerts[0])
+	}
+	if alerts[0].Title != "BTCUSDT 15m 暴涨" {
+		t.Fatalf("unexpected title: %q", alerts[0].Title)
+	}
+	if alerts[0].Summary != "现价 132.8700，15m 涨幅 3.00%（阈值 2.50%）" {
+		t.Fatalf("unexpected summary: %q", alerts[0].Summary)
+	}
+	wantDetails := []string{
+		"成交量 10.0000（阈值 1000.0000）",
+		"日线背景：上涨趋势，RSI14 58.20",
+	}
+	if len(alerts[0].Details) != len(wantDetails) {
+		t.Fatalf("unexpected details: %+v", alerts[0].Details)
+	}
+	for i, want := range wantDetails {
+		if alerts[0].Details[i] != want {
+			t.Fatalf("unexpected detail[%d]: want %q, got %q", i, want, alerts[0].Details[i])
+		}
 	}
 }
 
