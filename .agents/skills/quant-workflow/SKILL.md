@@ -54,11 +54,12 @@ When operating from the Mac controller to `47.250.138.143`, do not treat a contr
   - `ssh: connect to host 47.250.138.143 port 22: Bad file descriptor`
 - First distinguish transport from reachability:
   - run `nc -zvw5 47.250.138.143 22`
-- If TCP `22` is reachable, retry `ssh` / `scp` / `rsync` with:
+- If TCP `22` is reachable, retry `ssh` and any already-verified `rsync` path with:
   - `-o ProxyCommand='nc %h %p'`
 - For controller-to-ECS file writes in this environment, do **not** assume `scp` is available.
   - Prefer streaming a verified local file over `ssh` stdin, for example:
     - `ssh ... 'cat > /remote/path/file' < /local/path/file`
+- Do not spend turns probing `scp` in this environment. Treat it as unsupported unless the user states otherwise.
 - Record this fallback in the current run workspace `execution-log.md` when used, so later turns do not misdiagnose the same controller-local issue as an ECS outage.
 
 If the phase is `coding` or later, run the remote baseline next:
@@ -127,6 +128,7 @@ Use these child skills:
 - Do not skip `plan-review`, `code-review`, `testing`, or `docs`.
 - Do not claim completion until the five durable docs are updated.
 - Do not treat `go test ./...` as sufficient verification.
+- For runtime-facing changes, do not mark the run `done` until the source is pushed, the target ECS service is rebuilt/restarted as needed, and both `127.0.0.1` plus the public entry verify the new behavior.
 - High-risk changes must stop for user confirmation:
   - real trading semantics
   - hard risk defaults
