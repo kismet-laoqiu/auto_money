@@ -22,29 +22,36 @@ type EvaluateSignalFunc func([]core.Bar, int, config.StrategyConfig) core.Signal
 type ExtractFeaturesFunc func([]core.Bar, int, config.StrategyConfig) core.FeatureSet
 
 type Config struct {
-	WatchlistPath    string
-	Provider         string
-	ProductType      string
-	Strategy         config.StrategyConfig
-	Insights         config.InsightsConfig
-	Store            WarehouseStore
-	PriceReader      PriceReader
-	LoadWatchlist    func(string) (watchlist.File, error)
-	EvaluateSignal   EvaluateSignalFunc
-	ExtractFeatures  ExtractFeaturesFunc
-	Now              func() time.Time
+	WatchlistPath   string
+	Provider        string
+	ProductType     string
+	Strategy        config.StrategyConfig
+	Insights        config.InsightsConfig
+	Store           WarehouseStore
+	PriceReader     PriceReader
+	LoadWatchlist   func(string) (watchlist.File, error)
+	EvaluateSignal  EvaluateSignalFunc
+	ExtractFeatures ExtractFeaturesFunc
+	Now             func() time.Time
 }
 
 type Service struct {
 	cfg Config
 
-	mu        sync.Mutex
-	threshold map[string]cachedThreshold
+	mu            sync.Mutex
+	threshold     map[string]cachedThreshold
+	marketFetcher marketContextFetcher
+	marketCache   cachedMarketContext
 }
 
 type cachedThreshold struct {
 	At         time.Time
 	Thresholds AnomalyThresholds
+}
+
+type cachedMarketContext struct {
+	At       time.Time
+	Snapshot *MarketContextSnapshot
 }
 
 func NewService(cfg Config) *Service {
@@ -61,8 +68,9 @@ func NewService(cfg Config) *Service {
 		cfg.Now = time.Now
 	}
 	return &Service{
-		cfg:       cfg,
-		threshold: map[string]cachedThreshold{},
+		cfg:           cfg,
+		threshold:     map[string]cachedThreshold{},
+		marketFetcher: newMarketContextHTTPFetcher(cfg.Now),
 	}
 }
 
@@ -95,9 +103,10 @@ func (service *Service) BuildDashboard(ctx context.Context) (DashboardReport, er
 		return DashboardReport{}, err
 	}
 	report := DashboardReport{
-		GeneratedAt: service.cfg.Now().UTC(),
-		Watchlist:   service.cfg.WatchlistPath,
-		Symbols:     make([]SymbolSnapshot, 0, len(file.Symbols)),
+		GeneratedAt:   service.cfg.Now().UTC(),
+		Watchlist:     service.cfg.WatchlistPath,
+		Symbols:       make([]SymbolSnapshot, 0, len(file.Symbols)),
+		MarketContext: &MarketContextSnapshot{},
 	}
 	for _, item := range file.Symbols {
 		snapshot, alerts, err := service.evaluateSymbol(ctx, file, strings.TrimSpace(item.Symbol))
@@ -114,6 +123,7 @@ func (service *Service) BuildDashboard(ctx context.Context) (DashboardReport, er
 		}
 		return report.Alerts[i].Ts.After(report.Alerts[j].Ts)
 	})
+	report.MarketContext = service.buildMarketContext(ctx, file)
 	return report, nil
 }
 

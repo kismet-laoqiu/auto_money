@@ -12,16 +12,16 @@ import (
 
 	"quantlab/internal/backtest"
 	"quantlab/internal/config"
-	"quantlab/internal/platform/insights"
 	"quantlab/internal/market"
+	"quantlab/internal/platform/insights"
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
 	watchlistsvc "quantlab/internal/platform/watchlist"
-	basewatchlist "quantlab/internal/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
 	"quantlab/internal/trader"
+	basewatchlist "quantlab/internal/watchlist"
 )
 
 func TestRouterHealthEndpoint(t *testing.T) {
@@ -305,7 +305,7 @@ func TestRouterStrategyVersionsEndpoint(t *testing.T) {
 					ID:             "promo-2",
 					StrategyID:     "mstr-wave-fib",
 					Version:        "v0.1.1",
-						ConfigPath:     "configs/live.yaml",
+					ConfigPath:     "configs/live.yaml",
 					State:          promotion.StateShadowPassed,
 					ObjectiveScore: 0.81,
 					FinalScore:     0.83,
@@ -315,7 +315,7 @@ func TestRouterStrategyVersionsEndpoint(t *testing.T) {
 					ID:             "promo-1",
 					StrategyID:     "mstr-wave-fib",
 					Version:        "v0.1.0",
-						ConfigPath:     "configs/live.yaml",
+					ConfigPath:     "configs/live.yaml",
 					State:          promotion.StateBacktestPassed,
 					ObjectiveScore: 0.79,
 					FinalScore:     0.8,
@@ -421,6 +421,9 @@ func TestRouterDashboardJSON(t *testing.T) {
 		Dashboard: stubDashboardService{
 			report: insights.DashboardReport{
 				Symbols: []insights.SymbolSnapshot{{Symbol: "BTCUSDT", LatestPrice: 81234.5}},
+				MarketContext: &insights.MarketContextSnapshot{
+					FearGreed: &insights.FearGreedSnapshot{Value: 11, Classification: "Extreme Fear"},
+				},
 			},
 		},
 	}).ServeHTTP(recorder, request)
@@ -430,6 +433,9 @@ func TestRouterDashboardJSON(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"symbol":"BTCUSDT"`) {
 		t.Fatalf("unexpected payload: %s", recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), `"market_context"`) || !strings.Contains(recorder.Body.String(), `"fear_greed"`) {
+		t.Fatalf("expected market context payload: %s", recorder.Body.String())
 	}
 }
 
@@ -441,9 +447,9 @@ func TestRouterWatchlistSaveHTML(t *testing.T) {
 	request.Header.Set("Accept", "text/html")
 
 	NewHandler(HandlerConfig{
-		Store:      store,
-		Dashboard:  stubDashboardService{html: "<html><body>watchlist saved</body></html>"},
-		Watchlist:  stubWatchlistService{savedFile: basewatchlist.File{Symbols: []config.LiveSymbolConfig{{Symbol: "BTCUSDT"}, {Symbol: "ETHUSDT"}}}, symbolsText: "BTCUSDT\nETHUSDT"},
+		Store:     store,
+		Dashboard: stubDashboardService{html: "<html><body>watchlist saved</body></html>"},
+		Watchlist: stubWatchlistService{savedFile: basewatchlist.File{Symbols: []config.LiveSymbolConfig{{Symbol: "BTCUSDT"}, {Symbol: "ETHUSDT"}}}, symbolsText: "BTCUSDT\nETHUSDT"},
 	}).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {

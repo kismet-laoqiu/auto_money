@@ -23,6 +23,18 @@ func TestServiceRenderHTMLIncludesMarkdownAndForms(t *testing.T) {
 						TrendUp:      true,
 					},
 				}},
+				MarketContext: &insights.MarketContextSnapshot{
+					BTC: &insights.MarketAssetSnapshot{
+						Symbol:        "BTCUSDT",
+						CurrentPrice:  81234.5,
+						WMA200:        59436,
+						PriceToWMA200: 1.37,
+					},
+					FearGreed: &insights.FearGreedSnapshot{
+						Value:          11,
+						Classification: "Extreme Fear",
+					},
+				},
 			},
 		},
 	})
@@ -36,6 +48,9 @@ func TestServiceRenderHTMLIncludesMarkdownAndForms(t *testing.T) {
 	}
 	if !strings.Contains(html, "# QuantLab Dashboard") {
 		t.Fatalf("expected markdown body, got %q", html)
+	}
+	if !strings.Contains(html, "## Market Context") || !strings.Contains(html, "fear_greed=11") {
+		t.Fatalf("expected market context block, got %q", html)
 	}
 	if !strings.Contains(html, "保存 Watchlist") || !strings.Contains(html, "执行 Apply 并重启 marketd") {
 		t.Fatalf("expected forms, got %q", html)

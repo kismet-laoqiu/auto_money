@@ -43,20 +43,91 @@ func (event Event) EventTime() time.Time { return event.Ts }
 func (event Event) Kind() string         { return "insight.alert" }
 
 type DashboardReport struct {
-	GeneratedAt time.Time        `json:"generated_at"`
-	Watchlist   string           `json:"watchlist"`
-	Symbols     []SymbolSnapshot `json:"symbols"`
-	Alerts      []Event          `json:"alerts"`
+	GeneratedAt   time.Time              `json:"generated_at"`
+	Watchlist     string                 `json:"watchlist"`
+	Symbols       []SymbolSnapshot       `json:"symbols"`
+	Alerts        []Event                `json:"alerts"`
+	MarketContext *MarketContextSnapshot `json:"market_context,omitempty"`
+}
+
+type MarketContextSnapshot struct {
+	BTC              *MarketAssetSnapshot      `json:"btc,omitempty"`
+	ETH              *MarketAssetSnapshot      `json:"eth,omitempty"`
+	RelativeStrength *RelativeStrengthSnapshot `json:"relative_strength,omitempty"`
+	FearGreed        *FearGreedSnapshot        `json:"fear_greed,omitempty"`
+	Hashrate         *HashrateSnapshot         `json:"hashrate,omitempty"`
+	Halving          *HalvingSnapshot          `json:"halving,omitempty"`
+	BalancedPrice    *MarketLevelSnapshot      `json:"balanced_price,omitempty"`
+	MVRV             *MarketLevelSnapshot      `json:"mvrv,omitempty"`
+	Mnav             *TreasuryPremiumSnapshot  `json:"mnav,omitempty"`
+}
+
+type MarketAssetSnapshot struct {
+	Symbol        string    `json:"symbol"`
+	CurrentPrice  float64   `json:"current_price"`
+	Return7d      float64   `json:"return_7d"`
+	Return30d     float64   `json:"return_30d"`
+	Return90d     float64   `json:"return_90d"`
+	WMA200        float64   `json:"wma_200,omitempty"`
+	PriceToWMA200 float64   `json:"price_to_wma_200,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+}
+
+type RelativeStrengthSnapshot struct {
+	BTCMinusETH7d  float64 `json:"btc_minus_eth_7d"`
+	BTCMinusETH30d float64 `json:"btc_minus_eth_30d"`
+	BTCMinusETH90d float64 `json:"btc_minus_eth_90d"`
+}
+
+type FearGreedSnapshot struct {
+	Value          int       `json:"value"`
+	Classification string    `json:"classification"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+}
+
+type HashrateSnapshot struct {
+	CurrentEH float64   `json:"current_eh"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
+
+type HalvingSnapshot struct {
+	CurrentBlock    int64     `json:"current_block"`
+	TargetBlock     int64     `json:"target_block"`
+	BlocksRemaining int64     `json:"blocks_remaining"`
+	DaysRemaining   float64   `json:"days_remaining"`
+	CurrentReward   float64   `json:"current_reward"`
+	NextReward      float64   `json:"next_reward"`
+	EstimatedAt     time.Time `json:"estimated_at,omitempty"`
+}
+
+type MarketLevelSnapshot struct {
+	Value     float64   `json:"value"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
+}
+
+type TreasuryPremiumSnapshot struct {
+	ETHPrice float64                  `json:"eth_price,omitempty"`
+	MSTR     *TreasuryCompanySnapshot `json:"mstr,omitempty"`
+	BMNR     *TreasuryCompanySnapshot `json:"bmnr,omitempty"`
+}
+
+type TreasuryCompanySnapshot struct {
+	Symbol          string  `json:"symbol"`
+	Holdings        float64 `json:"holdings,omitempty"`
+	StockPrice      float64 `json:"stock_price"`
+	Ratio           float64 `json:"ratio,omitempty"`
+	BasicRatio      float64 `json:"basic_ratio,omitempty"`
+	EnterpriseRatio float64 `json:"enterprise_ratio,omitempty"`
 }
 
 type SymbolSnapshot struct {
-	Symbol             string            `json:"symbol"`
-	LatestPrice        float64           `json:"latest_price"`
-	Latest15mCloseAt   time.Time         `json:"latest_15m_close_at"`
-	Latest1dCloseAt    time.Time         `json:"latest_1d_close_at"`
-	DailySignal        *SignalSnapshot   `json:"daily_signal,omitempty"`
-	DailyFeatures      FeatureSnapshot   `json:"daily_features"`
-	LatestMarketAlert  *AnomalySnapshot  `json:"latest_market_alert,omitempty"`
+	Symbol            string           `json:"symbol"`
+	LatestPrice       float64          `json:"latest_price"`
+	Latest15mCloseAt  time.Time        `json:"latest_15m_close_at"`
+	Latest1dCloseAt   time.Time        `json:"latest_1d_close_at"`
+	DailySignal       *SignalSnapshot  `json:"daily_signal,omitempty"`
+	DailyFeatures     FeatureSnapshot  `json:"daily_features"`
+	LatestMarketAlert *AnomalySnapshot `json:"latest_market_alert,omitempty"`
 }
 
 type SignalSnapshot struct {

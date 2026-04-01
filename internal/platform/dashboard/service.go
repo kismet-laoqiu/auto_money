@@ -87,6 +87,7 @@ func buildMarkdown(report insights.DashboardReport) string {
 			))
 		}
 	}
+	writeMarketContextMarkdown(&builder, report.MarketContext)
 	builder.WriteString("\n## Active Alerts\n")
 	if len(report.Alerts) == 0 {
 		builder.WriteString("- none\n")
@@ -96,6 +97,89 @@ func buildMarkdown(report insights.DashboardReport) string {
 		builder.WriteString(fmt.Sprintf("- [%s] %s | %s\n", alert.Interval, alert.Title, alert.Summary))
 	}
 	return builder.String()
+}
+
+func writeMarketContextMarkdown(builder *strings.Builder, snapshot *insights.MarketContextSnapshot) {
+	if snapshot == nil {
+		return
+	}
+	builder.WriteString("\n## Market Context\n")
+	wrote := false
+	if snapshot.BTC != nil {
+		builder.WriteString(fmt.Sprintf("- btc price=%.2f wma200=%.2f price_to_wma200=%.2fx return_7d=%.2f return_30d=%.2f return_90d=%.2f\n",
+			snapshot.BTC.CurrentPrice,
+			snapshot.BTC.WMA200,
+			snapshot.BTC.PriceToWMA200,
+			snapshot.BTC.Return7d,
+			snapshot.BTC.Return30d,
+			snapshot.BTC.Return90d,
+		))
+		wrote = true
+	}
+	if snapshot.ETH != nil {
+		builder.WriteString(fmt.Sprintf("- eth price=%.2f return_7d=%.2f return_30d=%.2f return_90d=%.2f\n",
+			snapshot.ETH.CurrentPrice,
+			snapshot.ETH.Return7d,
+			snapshot.ETH.Return30d,
+			snapshot.ETH.Return90d,
+		))
+		wrote = true
+	}
+	if snapshot.RelativeStrength != nil {
+		builder.WriteString(fmt.Sprintf("- btc_minus_eth_7d=%.2f btc_minus_eth_30d=%.2f btc_minus_eth_90d=%.2f\n",
+			snapshot.RelativeStrength.BTCMinusETH7d,
+			snapshot.RelativeStrength.BTCMinusETH30d,
+			snapshot.RelativeStrength.BTCMinusETH90d,
+		))
+		wrote = true
+	}
+	if snapshot.FearGreed != nil {
+		builder.WriteString(fmt.Sprintf("- fear_greed=%d (%s)\n", snapshot.FearGreed.Value, snapshot.FearGreed.Classification))
+		wrote = true
+	}
+	if snapshot.Hashrate != nil {
+		builder.WriteString(fmt.Sprintf("- hashrate_eh=%.2f\n", snapshot.Hashrate.CurrentEH))
+		wrote = true
+	}
+	if snapshot.Halving != nil {
+		builder.WriteString(fmt.Sprintf("- halving_block=%d target_block=%d days_remaining=%.2f\n",
+			snapshot.Halving.CurrentBlock,
+			snapshot.Halving.TargetBlock,
+			snapshot.Halving.DaysRemaining,
+		))
+		wrote = true
+	}
+	if snapshot.BalancedPrice != nil {
+		builder.WriteString(fmt.Sprintf("- balanced_price=%.2f\n", snapshot.BalancedPrice.Value))
+		wrote = true
+	}
+	if snapshot.MVRV != nil {
+		builder.WriteString(fmt.Sprintf("- mvrv=%.2f\n", snapshot.MVRV.Value))
+		wrote = true
+	}
+	if snapshot.Mnav != nil {
+		if snapshot.Mnav.MSTR != nil {
+			builder.WriteString(fmt.Sprintf("- mstr basic_ratio=%.2fx enterprise_ratio=%.2fx stock_price=%.2f holdings=%.0f\n",
+				snapshot.Mnav.MSTR.BasicRatio,
+				snapshot.Mnav.MSTR.EnterpriseRatio,
+				snapshot.Mnav.MSTR.StockPrice,
+				snapshot.Mnav.MSTR.Holdings,
+			))
+			wrote = true
+		}
+		if snapshot.Mnav.BMNR != nil {
+			builder.WriteString(fmt.Sprintf("- bmnr ratio=%.2fx stock_price=%.2f holdings=%.0f eth_price=%.2f\n",
+				snapshot.Mnav.BMNR.Ratio,
+				snapshot.Mnav.BMNR.StockPrice,
+				snapshot.Mnav.BMNR.Holdings,
+				snapshot.Mnav.ETHPrice,
+			))
+			wrote = true
+		}
+	}
+	if !wrote {
+		builder.WriteString("- none\n")
+	}
 }
 
 var pageTemplate = template.Must(template.New("dashboard").Parse(`

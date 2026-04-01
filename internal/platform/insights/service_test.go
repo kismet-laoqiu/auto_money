@@ -13,7 +13,7 @@ import (
 func TestServiceDetectAlertsTriggersDailySignalAboveHistoryThreshold(t *testing.T) {
 	store := &storeStub{
 		bars: map[string][]core.Bar{
-			"bitget:BTCUSDT:1d": buildBars(8, time.Unix(1710000000, 0).UTC(), time.Hour*24, 100, 10),
+			"bitget:BTCUSDT:1d":  buildBars(8, time.Unix(1710000000, 0).UTC(), time.Hour*24, 100, 10),
 			"bitget:BTCUSDT:15m": buildBars(32, time.Unix(1710000000, 0).UTC(), 15*time.Minute, 100, 10),
 		},
 		thresholds: map[string]AnomalyThresholds{
@@ -109,7 +109,7 @@ func TestServiceDetectAlertsTriggersVolumeSpike(t *testing.T) {
 func TestServiceBuildDashboardIncludesLatestPriceAndFeatures(t *testing.T) {
 	store := &storeStub{
 		bars: map[string][]core.Bar{
-			"bitget:BTCUSDT:1d": buildBars(10, time.Unix(1710000000, 0).UTC(), time.Hour*24, 100, 10),
+			"bitget:BTCUSDT:1d":  buildBars(10, time.Unix(1710000000, 0).UTC(), time.Hour*24, 100, 10),
 			"bitget:BTCUSDT:15m": buildBars(32, time.Unix(1710000000, 0).UTC(), 15*time.Minute, 100, 10),
 		},
 		thresholds: map[string]AnomalyThresholds{
@@ -123,7 +123,7 @@ func TestServiceBuildDashboardIncludesLatestPriceAndFeatures(t *testing.T) {
 			DailySignal: config.DailySignalAlertConfig{Interval: "1d", LookbackBars: 10, MinScore: 100, ScoreQuantile: 0.99, CooldownBars: 2},
 			Anomaly:     config.AnomalyAlertConfig{Interval: "15m", RollingWindow: 20, CooldownBars: 4, MinMovePct: 20, MinVolumeRatio: 10, MinVolumeZScore: 10},
 		},
-		Store: store,
+		Store:       store,
 		PriceReader: priceReaderStub{price: 12345.6},
 		LoadWatchlist: func(string) (watchlist.File, error) {
 			return watchlist.File{Provider: "bitget", ProductType: "USDT-FUTURES", Symbols: []config.LiveSymbolConfig{{Symbol: "BTCUSDT"}}}, nil
@@ -138,6 +138,7 @@ func TestServiceBuildDashboardIncludesLatestPriceAndFeatures(t *testing.T) {
 		},
 		Now: func() time.Time { return time.Unix(1710000000, 0).UTC() },
 	})
+	service.marketFetcher = marketContextFetcherStub{}
 
 	report, err := service.BuildDashboard(context.Background())
 	if err != nil {
@@ -151,6 +152,68 @@ func TestServiceBuildDashboardIncludesLatestPriceAndFeatures(t *testing.T) {
 	}
 	if report.Symbols[0].DailyFeatures.RSI14 != 31.5 || !report.Symbols[0].DailyFeatures.BreakoutVolumeConfirmed {
 		t.Fatalf("unexpected features: %+v", report.Symbols[0].DailyFeatures)
+	}
+}
+
+func TestServiceBuildDashboardIncludesMarketContext(t *testing.T) {
+	store := &storeStub{
+		bars: map[string][]core.Bar{
+			"bitget:BTCUSDT:1d":  buildBars(120, time.Unix(1710000000, 0).UTC(), time.Hour*24, 100, 10),
+			"bitget:BTCUSDT:15m": buildBars(32, time.Unix(1710000000, 0).UTC(), 15*time.Minute, 100, 10),
+			"bitget:ETHUSDT:1d":  buildBars(120, time.Unix(1710000000, 0).UTC(), time.Hour*24, 200, 10),
+			"bitget:ETHUSDT:15m": buildBars(32, time.Unix(1710000000, 0).UTC(), 15*time.Minute, 200, 10),
+		},
+		thresholds: map[string]AnomalyThresholds{
+			"bitget:BTCUSDT:15m": {MovePct: 80, Volume: 1000},
+			"bitget:ETHUSDT:15m": {MovePct: 80, Volume: 1000},
+		},
+	}
+	service := NewService(Config{
+		WatchlistPath: "configs/platform/watchlist.yaml",
+		Strategy:      config.StrategyConfig{FastSMA: 2, SlowSMA: 3, ATRWindow: 2, LevelLookback: 2, PivotWindow: 1},
+		Insights: config.InsightsConfig{
+			DailySignal: config.DailySignalAlertConfig{Interval: "1d", LookbackBars: 120, MinScore: 100, ScoreQuantile: 0.99, CooldownBars: 2},
+			Anomaly:     config.AnomalyAlertConfig{Interval: "15m", RollingWindow: 20, CooldownBars: 4, MinMovePct: 20, MinVolumeRatio: 10, MinVolumeZScore: 10},
+		},
+		Store: store,
+		LoadWatchlist: func(string) (watchlist.File, error) {
+			return watchlist.File{
+				Provider:    "bitget",
+				ProductType: "USDT-FUTURES",
+				Symbols: []config.LiveSymbolConfig{
+					{Symbol: "BTCUSDT"},
+					{Symbol: "ETHUSDT"},
+				},
+			}, nil
+		},
+		EvaluateSignal: func(_ []core.Bar, _ int, _ config.StrategyConfig) core.Signal { return core.Signal{Side: core.Flat} },
+		ExtractFeatures: func(_ []core.Bar, _ int, _ config.StrategyConfig) core.FeatureSet {
+			return core.FeatureSet{}
+		},
+		Now: func() time.Time { return time.Unix(1710000000, 0).UTC() },
+	})
+	service.marketFetcher = marketContextFetcherStub{
+		snapshot: marketContextExternalSnapshot{
+			WMA200: 250,
+			FearGreed: &FearGreedSnapshot{
+				Value:          11,
+				Classification: "Extreme Fear",
+			},
+		},
+	}
+
+	report, err := service.BuildDashboard(context.Background())
+	if err != nil {
+		t.Fatalf("build dashboard: %v", err)
+	}
+	if report.MarketContext == nil {
+		t.Fatalf("expected market context, got %+v", report)
+	}
+	if report.MarketContext.BTC == nil || report.MarketContext.BTC.WMA200 != 250 {
+		t.Fatalf("expected btc market context, got %+v", report.MarketContext)
+	}
+	if report.MarketContext.FearGreed == nil || report.MarketContext.FearGreed.Value != 11 {
+		t.Fatalf("expected fear and greed context, got %+v", report.MarketContext)
 	}
 }
 
@@ -175,6 +238,15 @@ type priceReaderStub struct {
 
 func (reader priceReaderStub) FetchTickerPrice(context.Context, string, string) (float64, error) {
 	return reader.price, nil
+}
+
+type marketContextFetcherStub struct {
+	snapshot marketContextExternalSnapshot
+	err      error
+}
+
+func (stub marketContextFetcherStub) Fetch(context.Context) (marketContextExternalSnapshot, error) {
+	return stub.snapshot, stub.err
 }
 
 func buildBars(count int, start time.Time, step time.Duration, basePrice, baseVolume float64) []core.Bar {

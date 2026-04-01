@@ -46,6 +46,21 @@ On start, resume, or after compaction, read in this order:
 4. current run workspace `status.md`
 5. current run workspace `execution-log.md`
 
+## Controller-to-ECS Transport Guardrail
+
+When operating from the Mac controller to `47.250.138.143`, do not treat a controller-side OpenSSH transport error as proof that ECS is down.
+
+- Known controller failure mode:
+  - `ssh: connect to host 47.250.138.143 port 22: Bad file descriptor`
+- First distinguish transport from reachability:
+  - run `nc -zvw5 47.250.138.143 22`
+- If TCP `22` is reachable, retry `ssh` / `scp` / `rsync` with:
+  - `-o ProxyCommand='nc %h %p'`
+- For controller-to-ECS file writes in this environment, do **not** assume `scp` is available.
+  - Prefer streaming a verified local file over `ssh` stdin, for example:
+    - `ssh ... 'cat > /remote/path/file' < /local/path/file`
+- Record this fallback in the current run workspace `execution-log.md` when used, so later turns do not misdiagnose the same controller-local issue as an ECS outage.
+
 If the phase is `coding` or later, run the remote baseline next:
 
 - `git status --short --branch`
