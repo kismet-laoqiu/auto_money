@@ -23,7 +23,7 @@ This is the strong-state orchestrator for this repository. It manages workspace 
 Rules:
 
 - Keep the `quant-*` skill pack on both sides. The controller canonical project install is the default entry; the repo mirror exists for direct-on-ECS development and remote `codex exec` / OpenClaw discovery.
-- A legacy compatibility copy may exist under `/Users/qiukeming/.codex/skills/quant-*/SKILL.md`, but it is not the truth source and must not drift from the controller canonical project install.
+- Do not keep any `quant-*` skill under `/Users/qiukeming/.codex/skills`. That global path is outside this workflow's canonical placement.
 - If the controller root exists in the current environment, it is the truth source for durable docs and run workspaces.
 - If the controller root does not exist, use the repo-local mirror `workspace/` and keep the same filenames and structure.
 
