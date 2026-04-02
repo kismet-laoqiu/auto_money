@@ -19,18 +19,22 @@
 推荐按下面顺序阅读并执行：
 
 1. `docs/ops/operator-quickstart.md`
-   先完成 build、启动、health check、status、strategy versions、backtest、promotion、notify、flatten 等标准操作。
-2. `docs/ops/warehouse-setup.md`
+   先完成 build、启动、health check、status、strategy versions、backtest、promotion、notify、flatten、`/api/operator/*` truth-layer 等标准操作。
+2. `docs/ops/runtime-facts.md`
+   读取 repo root、runtime health URL、ownership、state db、warehouse config 等非敏感现场事实。
+3. `docs/ops/workflow-doctrine.md`
+   读取 formal deploy、verification gate、SSH bypass、stop conditions。
+4. `docs/ops/warehouse-setup.md`
    初始化 PostgreSQL / TimescaleDB、migration、health check。
-3. `docs/ops/historical-sync.md`
+5. `docs/ops/historical-sync.md`
    运行 historical sync、aggregate、parquet export。
-4. `docs/ops/strategy-bundle-authoring.md`
+6. `docs/ops/strategy-bundle-authoring.md`
    编写或修改 `strategies/<strategy_id>/versions/<version>` bundle。
-5. `docs/ops/promotion-governance.md`
+7. `docs/ops/promotion-governance.md`
    推进 `request -> shadow -> canary -> approve -> rollback`。
-6. `docs/ops/openclaw-setup.md`
+8. `docs/ops/openclaw-setup.md`
    配置 OpenClaw channel、plugin allowlist 和 delivery path。
-7. `docs/ops/codex-claude-integration.md`
+9. `docs/ops/codex-claude-integration.md`
    用 Codex / Claude 通过 repo-local skills 走 research / backtest workflow。
 
 ## 最佳实践
@@ -46,6 +50,8 @@
 
 - 最终 E2E 报告：`plan/2026-03-29-platform-e2e-report-cn.md`
 - Operator quickstart：`docs/ops/operator-quickstart.md`
+- Runtime facts：`docs/ops/runtime-facts.md`
+- Workflow doctrine：`docs/ops/workflow-doctrine.md`
 - Operator best practices：`docs/ops/platform-operator-best-practices.md`
 - OpenClaw setup：`docs/ops/openclaw-setup.md`
 - Strategy bundle authoring：`docs/ops/strategy-bundle-authoring.md`

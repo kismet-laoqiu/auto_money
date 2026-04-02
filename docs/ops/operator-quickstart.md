@@ -5,7 +5,7 @@
 当前已经真实可用的 operator 面有四条：
 
 1. `platformd`
-   读取现有 SQLite runtime state，并提供 `health / status / positions / orders / events / bars / features / strategies / backtests / promotions / live flatten / dashboard / watchlist save / watchlist apply` HTTP API。
+   读取现有 SQLite runtime state，并提供 `health / status / positions / orders / events / bars / features / strategies / backtests / promotions / live flatten / dashboard / watchlist save / watchlist apply / operator facts / operator policy / operator leaders` HTTP API。
 2. `platformctl`
    作为 operator CLI，读取 `platformd` API，并提供 `status`、`strategy versions`、`historical sync`、`aggregate`、`export parquet`、`backtest run`、`promotion *`、`live flatten`、`notify test`、`warehouse health` 能力。
 3. `notifierd`
@@ -70,6 +70,9 @@ Smoke:
 curl -fsS http://127.0.0.1:8080/health
 curl -fsS http://127.0.0.1:8080/
 curl -fsS http://127.0.0.1:8080/api/dashboard | jq '.generated_at, (.symbols | length), (.alerts | length)'
+curl -fsS http://127.0.0.1:8080/api/operator/facts
+curl -fsS http://127.0.0.1:8080/api/operator/policy
+curl -fsS http://127.0.0.1:8080/api/operator/leaders
 ./bin/platformctl status -addr http://127.0.0.1:8080
 ./bin/platformctl strategy versions -addr http://127.0.0.1:8080 -strategy mstr-wave-fib
 ./bin/platformctl positions -addr http://127.0.0.1:8080
@@ -109,6 +112,37 @@ curl -fsS -X POST http://127.0.0.1:8080/api/watchlist/apply
 - `save` 只改 `configs/platform/watchlist.yaml`
 - `apply` 才会执行三年窗口 backfill / aggregate，并重启 `quantlab-marketd`
 - `platformd` 与 `notifierd` 每轮读取 watchlist 文件，不依赖自身重启感知 symbol 变化
+
+## Operator Truth Layer
+
+`2026-04-02` 起，repo 内新增一组非敏感 truth-layer 文件：
+
+- `configs/platform/site-facts.yaml`
+- `configs/platform/operator-policy.yaml`
+- `configs/platform/leaders.yaml`
+- `docs/ops/runtime-facts.md`
+- `docs/ops/workflow-doctrine.md`
+
+它们的用途分别是：
+
+- `site-facts.yaml`
+  固化 repo root、branch、platform/notifier health URL、state db、warehouse config、ownership、risk defaults。
+- `operator-policy.yaml`
+  固化写操作确认列表和 channel policy。
+- `leaders.yaml`
+  作为 leader score 的最窄静态挂点。
+- `runtime-facts.md` / `workflow-doctrine.md`
+  作为 operator / Codex / remote agent 可直接阅读的运行时真相和执行规则。
+
+对应的 read-only operator API：
+
+```bash
+curl -fsS http://127.0.0.1:8080/api/operator/facts
+curl -fsS http://127.0.0.1:8080/api/operator/policy
+curl -fsS http://127.0.0.1:8080/api/operator/leaders
+```
+
+当前这些接口只读，不触发任何 watchlist、promotion 或交易写路径。
 
 ## Promotion Flow
 
