@@ -214,6 +214,8 @@ func decodeTrades(msg publicMessage) ([]market.MarketEvent, error) {
 			events = append(events, market.TradeTickEvent{
 				EventIDValue: fmt.Sprintf("trade:%s:%s:%d", msg.Arg.InstID, row.TS, index),
 				SymbolValue:  msg.Arg.InstID,
+				Venue:        "bitget",
+				MarketType:   bitgetMarketType(msg.Arg.InstType),
 				Ts:           time.UnixMilli(ts).UTC(),
 				Price:        price,
 				Size:         size,
@@ -247,6 +249,8 @@ func decodeTrades(msg publicMessage) ([]market.MarketEvent, error) {
 		events = append(events, market.TradeTickEvent{
 			EventIDValue: fmt.Sprintf("trade:%s:%s:%d", msg.Arg.InstID, row[0], index),
 			SymbolValue:  msg.Arg.InstID,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(msg.Arg.InstType),
 			Ts:           time.UnixMilli(ts).UTC(),
 			Price:        price,
 			Size:         size,
@@ -294,6 +298,8 @@ func (decoder *PublicWSDecoder) decodeCandles(msg publicMessage) ([]market.Marke
 		bars = append(bars, market.BarClosedEvent{
 			EventIDValue: fmt.Sprintf("candle:%s:%s:%d", msg.Arg.InstID, interval, ts),
 			SymbolValue:  msg.Arg.InstID,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(msg.Arg.InstType),
 			Interval:     interval,
 			Ts:           time.UnixMilli(ts).UTC(),
 			Open:         openValue,

@@ -71,6 +71,9 @@ func TestRuntimeEmitsEntryIntentOnlyWhenArmedAndRiskPasses(t *testing.T) {
 	if payload["leverage"] != "3" {
 		t.Fatalf("expected leverage 3, got %+v", payload)
 	}
+	if payload["execution_venue"] != "bitget" {
+		t.Fatalf("expected execution venue bitget, got %+v", payload)
+	}
 }
 
 func TestRuntimeDoesNotEmitEntryIntentInSafeMode(t *testing.T) {

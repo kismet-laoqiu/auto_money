@@ -1,5 +1,7 @@
 package bitget
 
+import "strings"
+
 type ContractRule struct {
 	Symbol         string
 	MinTradeNum    float64
@@ -19,4 +21,11 @@ type contractRulePayload struct {
 	SizeMultiplier string `json:"sizeMultiplier"`
 	MaxLeverage    string `json:"maxLeverage"`
 	MaxLever       string `json:"maxLever"`
+}
+
+func bitgetMarketType(productType string) string {
+	if strings.Contains(strings.ToUpper(strings.TrimSpace(productType)), "SPOT") {
+		return "spot"
+	}
+	return "perp"
 }

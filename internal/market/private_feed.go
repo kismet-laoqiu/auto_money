@@ -15,6 +15,8 @@ func (decoder PrivateDecoder) Decode(raw []byte) ([]MarketEvent, error) {
 type OrderEvent struct {
 	EventIDValue string
 	SymbolValue  string
+	Venue        string `json:"venue,omitempty"`
+	MarketType   string `json:"market_type,omitempty"`
 	Ts           time.Time
 	ClientOID    string
 	OrderID      string
@@ -32,6 +34,8 @@ func (event OrderEvent) Kind() string         { return event.KindValue }
 type PositionEvent struct {
 	EventIDValue string
 	SymbolValue  string
+	Venue        string `json:"venue,omitempty"`
+	MarketType   string `json:"market_type,omitempty"`
 	Ts           time.Time
 	Qty          float64
 	KindValue    string
@@ -50,6 +54,8 @@ func (event PositionEvent) Kind() string {
 type AccountEvent struct {
 	EventIDValue string
 	SymbolValue  string
+	Venue        string `json:"venue,omitempty"`
+	MarketType   string `json:"market_type,omitempty"`
 	Ts           time.Time
 	MarginCoin   string
 	Available    float64

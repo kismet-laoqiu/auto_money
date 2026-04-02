@@ -15,21 +15,22 @@ import (
 func TestRuntimeExecutesIntentAndAppendsReconcileEvent(t *testing.T) {
 	ctx := context.Background()
 	intent := trader.EntryIntentEvent{
-		EventIDValue: "intent:MSTRUSDT:1m:1710000000000",
-		SymbolValue:  "MSTRUSDT",
-		Interval:     "1m",
-		Ts:           time.Unix(1710000000, 0).UTC(),
-		Side:         core.Long,
-		Score:        4.2,
-		Entry:        125,
-		Stop:         120,
-		Target:       135,
-		ProductType:  "USDT-FUTURES",
-		MarginMode:   "isolated",
-		MarginCoin:   "USDT",
-		Size:         "0.04",
-		Leverage:     "3",
-		ClientOID:    "cid-1",
+		EventIDValue:   "intent:MSTRUSDT:1m:1710000000000",
+		SymbolValue:    "MSTRUSDT",
+		Interval:       "1m",
+		Ts:             time.Unix(1710000000, 0).UTC(),
+		Side:           core.Long,
+		Score:          4.2,
+		Entry:          125,
+		Stop:           120,
+		Target:         135,
+		ProductType:    "USDT-FUTURES",
+		MarginMode:     "isolated",
+		MarginCoin:     "USDT",
+		ExecutionVenue: "bitget",
+		Size:           "0.04",
+		Leverage:       "3",
+		ClientOID:      "cid-1",
 	}
 	payload, err := json.Marshal(intent)
 	if err != nil {
@@ -93,8 +94,56 @@ func TestRuntimeExecutesIntentAndAppendsReconcileEvent(t *testing.T) {
 	if reconcile.OrderID != "oid-1" || reconcile.Status != "filled" || reconcile.ClientOID != "cid-1" {
 		t.Fatalf("unexpected reconcile payload: %+v", reconcile)
 	}
+	if reconcile.ExecutionVenue != "bitget" {
+		t.Fatalf("unexpected execution venue in reconcile payload: %+v", reconcile)
+	}
 	if store.cursors["execd"] != 7 {
 		t.Fatalf("unexpected cursor: %+v", store.cursors)
+	}
+}
+
+func TestRuntimeRejectsUnsupportedExecutionVenue(t *testing.T) {
+	ctx := context.Background()
+	intent := trader.EntryIntentEvent{
+		EventIDValue:   "intent:MSTRUSDT:1m:1710000000000",
+		SymbolValue:    "MSTRUSDT",
+		Interval:       "1m",
+		Ts:             time.Unix(1710000000, 0).UTC(),
+		Side:           core.Long,
+		ExecutionVenue: "hyperliquid",
+		ProductType:    "USDT-FUTURES",
+		MarginMode:     "isolated",
+		MarginCoin:     "USDT",
+		Size:           "0.04",
+		Leverage:       "3",
+		ClientOID:      "cid-unsupported",
+	}
+	payload, err := json.Marshal(intent)
+	if err != nil {
+		t.Fatalf("marshal intent: %v", err)
+	}
+	store := &memoryStore{
+		events: []sqlitepkg.EventEnvelope{{
+			Seq:        1,
+			Source:     "trader",
+			EventID:    intent.EventID(),
+			Symbol:     intent.Symbol(),
+			Kind:       intent.Kind(),
+			ExchangeTS: intent.EventTime(),
+			ReceivedTS: intent.EventTime(),
+			Payload:    payload,
+		}},
+		cursors: map[string]int64{},
+	}
+	runtime := NewRuntime(RuntimeConfig{
+		Store:             store,
+		Exchange:          &fakeExchangeClient{},
+		OrderPollInterval: time.Nanosecond,
+	})
+
+	err = runtime.ProcessAvailable(ctx)
+	if err == nil || err.Error() != "unsupported execution venue: hyperliquid" {
+		t.Fatalf("expected unsupported execution venue error, got %v", err)
 	}
 }
 

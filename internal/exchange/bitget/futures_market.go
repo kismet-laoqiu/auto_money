@@ -38,7 +38,7 @@ func (client *Client) FetchCandles(ctx context.Context, symbol, productType, int
 	if err != nil {
 		return nil, err
 	}
-	return decodeCandleEvents(symbol, interval, body)
+	return decodeCandleEvents(symbol, productType, interval, body)
 }
 
 func (client *Client) FetchTickerPrice(ctx context.Context, symbol, productType string) (float64, error) {
@@ -124,7 +124,7 @@ func decodeContractRules(body []byte) (map[string]ContractRule, error) {
 	return rules, nil
 }
 
-func decodeCandleEvents(symbol, interval string, body []byte) ([]market.BarClosedEvent, error) {
+func decodeCandleEvents(symbol, productType, interval string, body []byte) ([]market.BarClosedEvent, error) {
 	var response struct {
 		Code string     `json:"code"`
 		Msg  string     `json:"msg"`
@@ -168,6 +168,8 @@ func decodeCandleEvents(symbol, interval string, body []byte) ([]market.BarClose
 		events = append(events, market.BarClosedEvent{
 			EventIDValue: fmt.Sprintf("bootstrap:%s:%s:%d", symbol, interval, ts),
 			SymbolValue:  symbol,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(productType),
 			Interval:     interval,
 			Ts:           time.UnixMilli(ts).UTC(),
 			Open:         openValue,

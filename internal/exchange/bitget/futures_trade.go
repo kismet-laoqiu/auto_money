@@ -128,6 +128,8 @@ func (client *Client) FetchFuturesAccounts(ctx context.Context, productType stri
 		events = append(events, market.AccountEvent{
 			EventIDValue: fmt.Sprintf("account:%s:%d", row.MarginCoin, index),
 			SymbolValue:  row.MarginCoin,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(productType),
 			Ts:           now,
 			MarginCoin:   row.MarginCoin,
 			Available:    available,
@@ -177,6 +179,8 @@ func (client *Client) FetchFuturesPositions(ctx context.Context, productType, ma
 		events = append(events, market.PositionEvent{
 			EventIDValue: fmt.Sprintf("position:%s:%d", row.Symbol, index),
 			SymbolValue:  row.Symbol,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(productType),
 			Ts:           ts,
 			Qty:          qty,
 		})

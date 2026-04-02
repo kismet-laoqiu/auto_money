@@ -71,21 +71,22 @@ func TestRealExecutionRuntimeIntentLifecycle(t *testing.T) {
 	clientOID := fmt.Sprintf("ql-execd-real-open-%d", now.UnixMilli())
 
 	intent := trader.EntryIntentEvent{
-		EventIDValue: fmt.Sprintf("intent:real-execd:%d", now.UnixNano()),
-		SymbolValue:  realSymbol,
-		Interval:     "1m",
-		Ts:           now,
-		Side:         core.Long,
-		Score:        4.2,
-		Entry:        lastPrice,
-		Stop:         lastPrice * 0.98,
-		Target:       lastPrice * 1.04,
-		ProductType:  realProductType,
-		MarginMode:   realMarginMode,
-		MarginCoin:   realMarginCoin,
-		Size:         size,
-		Leverage:     "3",
-		ClientOID:    clientOID,
+		EventIDValue:   fmt.Sprintf("intent:real-execd:%d", now.UnixNano()),
+		SymbolValue:    realSymbol,
+		Interval:       "1m",
+		Ts:             now,
+		Side:           core.Long,
+		Score:          4.2,
+		Entry:          lastPrice,
+		Stop:           lastPrice * 0.98,
+		Target:         lastPrice * 1.04,
+		ProductType:    realProductType,
+		MarginMode:     realMarginMode,
+		MarginCoin:     realMarginCoin,
+		ExecutionVenue: "bitget",
+		Size:           size,
+		Leverage:       "3",
+		ClientOID:      clientOID,
 	}
 	body, err := json.Marshal(intent)
 	if err != nil {

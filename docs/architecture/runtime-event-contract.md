@@ -31,6 +31,16 @@
 - `order_fill`
 - `account_snapshot`
 
+当前 Phase 1 统一约束：
+
+- `market.public`
+  - `trade_tick / bar_closed / micro_bar_closed` payload 显式携带 `venue` 与 `market_type`
+- `market.private`
+  - `position_snapshot / position_update / order_update / order_fill / account_snapshot` payload 同样显式携带 `venue` 与 `market_type`
+- 当前 live producer 仍然只有 `bitget`
+  - 因此真实值当前固定表现为 `venue=bitget`
+  - `market_type` 依据 `productType / instType` 归一后表现为 `perp` 或 `spot`
+
 ### `traderd`
 
 消费 source:
@@ -49,7 +59,7 @@
   deterministic signal output，只表达候选交易，不触发写单
 - `entry.intent.created`
   交给 `execd` 的执行意图，当前 payload 固定包含：
-  `symbol / interval / ts / side / score / entry / stop / target / product_type / margin_mode / margin_coin / size / leverage / client_oid`
+  `symbol / interval / ts / side / score / entry / stop / target / execution_venue / product_type / margin_mode / margin_coin / size / leverage / client_oid`
 - `risk.state_changed`
   reconciliation 或风控降级事件
 
@@ -90,6 +100,13 @@ flatten 规则:
 
 - one-way mode: `reduceOnly=YES`
 - hedge mode: `tradeSide=close`
+
+Phase 1 execution venue 约束：
+
+- 当前 `execution_venue` 已进入 `entry.intent.created` 与 `execution.reconciled`
+- 当前 formal runtime 只接受 `bitget`
+- 非 `bitget` intent 会在进入 `SetLeverage / PlaceOrder` 之前被直接拒绝
+- 这一步的目标是先把 execution venue 语义钉进事件契约，而不是提前引入第二条真实交易所写路径
 
 ### `notifierd`
 

@@ -23,6 +23,13 @@ func TestBuildTradeTickEvent(t *testing.T) {
 	if len(events) != 1 || events[0].Kind() != "trade_tick" {
 		t.Fatalf("unexpected events: %+v", events)
 	}
+	trade, ok := events[0].(market.TradeTickEvent)
+	if !ok {
+		t.Fatalf("unexpected event type: %T", events[0])
+	}
+	if trade.Venue != "bitget" || trade.MarketType != "perp" {
+		t.Fatalf("expected venue identity on trade event: %+v", trade)
+	}
 }
 
 func TestDecodeCandleSnapshotsClosePreviousBar(t *testing.T) {
@@ -50,6 +57,9 @@ func TestDecodeCandleSnapshotsClosePreviousBar(t *testing.T) {
 	}
 	if !bar.Ts.Equal(time.UnixMilli(1710000000000).UTC()) || bar.Close != 62050 {
 		t.Fatalf("unexpected closed bar: %+v", bar)
+	}
+	if bar.Venue != "bitget" || bar.MarketType != "perp" {
+		t.Fatalf("expected venue identity on candle event: %+v", bar)
 	}
 }
 

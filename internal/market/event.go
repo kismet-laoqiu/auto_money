@@ -12,6 +12,8 @@ type MarketEvent interface {
 type TradeTickEvent struct {
 	EventIDValue string
 	SymbolValue  string
+	Venue        string `json:"venue,omitempty"`
+	MarketType   string `json:"market_type,omitempty"`
 	Ts           time.Time
 	Price        float64
 	Size         float64
@@ -26,6 +28,8 @@ func (event TradeTickEvent) Kind() string         { return "trade_tick" }
 type BarClosedEvent struct {
 	EventIDValue string
 	SymbolValue  string
+	Venue        string `json:"venue,omitempty"`
+	MarketType   string `json:"market_type,omitempty"`
 	Interval     string
 	Ts           time.Time
 	Open         float64
@@ -43,6 +47,8 @@ func (event BarClosedEvent) Kind() string         { return "bar_closed" }
 type MicroBarClosedEvent struct {
 	EventIDValue string
 	SymbolValue  string
+	Venue        string `json:"venue,omitempty"`
+	MarketType   string `json:"market_type,omitempty"`
 	OpenedAt     time.Time
 	ClosedAt     time.Time
 	Open         float64

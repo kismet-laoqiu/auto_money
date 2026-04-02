@@ -1,0 +1,38 @@
+[
+  {
+    "venue": "bitget",
+    "market_type": "perp",
+    "raw": "BTCUSDT",
+    "canonical_symbol": "BTC",
+    "venue_symbol": "BTCUSDT"
+  },
+  {
+    "venue": "bitget",
+    "market_type": "perp",
+    "raw": "ETHUSDT",
+    "canonical_symbol": "ETH",
+    "venue_symbol": "ETHUSDT"
+  },
+  {
+    "venue": "hyperliquid",
+    "market_type": "perp",
+    "raw": "BTC",
+    "canonical_symbol": "BTC",
+    "venue_symbol": "BTC"
+  },
+  {
+    "venue": "hyperliquid",
+    "market_type": "spot",
+    "raw": "BTC/USDC",
+    "canonical_symbol": "BTC",
+    "venue_symbol": "BTC/USDC"
+  },
+  {
+    "venue": "hyperliquid",
+    "market_type": "spot",
+    "raw": "@107",
+    "canonical_symbol": "HYPE",
+    "venue_symbol": "@107",
+    "asset_id": "107"
+  }
+]

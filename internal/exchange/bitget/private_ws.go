@@ -261,6 +261,8 @@ func decodeFillEvents(msg privateMessage) ([]market.MarketEvent, error) {
 		events = append(events, market.OrderEvent{
 			EventIDValue: buildPrivateStreamEventID("fill_ws", symbol, row.OrderID, row.ClientOID, priceRaw, row.BaseVolume, strconv.Itoa(index)),
 			SymbolValue:  symbol,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(msg.Arg.InstType),
 			Ts:           time.Time{},
 			ClientOID:    row.ClientOID,
 			OrderID:      row.OrderID,
@@ -307,6 +309,8 @@ func decodeOrderEvents(msg privateMessage) ([]market.MarketEvent, error) {
 		events = append(events, market.OrderEvent{
 			EventIDValue: buildPrivateStreamEventID("order_ws", msg.Arg.InstID, row.OrderID, row.ClientOID, row.Status, row.Size, row.PriceAvg, strconv.Itoa(index)),
 			SymbolValue:  msg.Arg.InstID,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(msg.Arg.InstType),
 			Ts:           time.Time{},
 			ClientOID:    row.ClientOID,
 			OrderID:      row.OrderID,
@@ -337,6 +341,8 @@ func decodePositionEvents(msg privateMessage) ([]market.MarketEvent, error) {
 		events = append(events, market.PositionEvent{
 			EventIDValue: buildPrivateStreamEventID("position_ws", symbol, row.HoldSide, row.Total, row.UTime, strconv.Itoa(index)),
 			SymbolValue:  symbol,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(msg.Arg.InstType),
 			Ts:           ts,
 			Qty:          qty,
 		})
@@ -370,6 +376,8 @@ func decodeAccountEvents(msg privateMessage) ([]market.MarketEvent, error) {
 		events = append(events, market.AccountEvent{
 			EventIDValue: buildPrivateStreamEventID("account_ws", row.MarginCoin, row.Available, equityRaw, row.USDTEq, row.UnrealizedPL, strconv.Itoa(index)),
 			SymbolValue:  row.MarginCoin,
+			Venue:        "bitget",
+			MarketType:   bitgetMarketType(msg.Arg.InstType),
 			Ts:           time.Time{},
 			MarginCoin:   row.MarginCoin,
 			Available:    available,

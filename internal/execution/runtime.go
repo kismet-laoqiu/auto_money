@@ -170,6 +170,13 @@ func (runtime *Runtime) executeIntent(ctx context.Context, intent EntryIntentEve
 	if runtime.cfg.Exchange == nil {
 		return fmt.Errorf("execution exchange is nil")
 	}
+	executionVenue := strings.ToLower(strings.TrimSpace(intent.ExecutionVenue))
+	if executionVenue == "" {
+		executionVenue = "bitget"
+	}
+	if executionVenue != "bitget" {
+		return fmt.Errorf("unsupported execution venue: %s", executionVenue)
+	}
 	productType := firstNonEmpty(intent.ProductType, runtime.cfg.ProductType)
 	marginMode := firstNonEmpty(intent.MarginMode, runtime.cfg.MarginMode)
 	marginCoin := firstNonEmpty(intent.MarginCoin, runtime.cfg.MarginCoin)
