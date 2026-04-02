@@ -1,0 +1,20 @@
+repo_root: /root/.config/superpowers/worktrees/quant-lab/autoresearch-20260328-all-plan
+primary_branch: autoresearch/20260328-all-plan
+platformd:
+  public_base_url: http://47.250.138.143:8080
+  local_base_url: http://127.0.0.1:8080
+notifierd:
+  local_health_url: http://127.0.0.1:18081/health
+runtime:
+  state_db: var/live-state.db
+  warehouse_config: configs/platform/warehouse.yaml
+control_plane:
+  telegram_inbound_owner: notifierd
+  openclaw_telegram_enabled: false
+  openclaw_dingtalk_enabled: true
+risk_defaults:
+  leverage: 3
+  max_order_notional_usdt: 10
+  max_total_exposure_usdt: 30
+  max_concurrent_positions: 1
+  daily_max_loss_usdt: 20

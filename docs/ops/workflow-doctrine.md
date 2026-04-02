@@ -1,0 +1,21 @@
+# Workflow Doctrine
+
+- completion chain:
+  - commit
+  - push
+  - formal deploy
+  - `127.0.0.1` verification
+  - public verification when applicable
+  - durable docs and run docs synced
+- controller to ECS:
+  - prefer `ssh -o ProxyCommand='nc %h %p'`
+  - do not assume `scp` works
+  - prefer stdin streaming or paramiko fallback for remote writes
+- testing gates:
+  - proof test
+  - real verification
+  - impact safety
+- stop conditions:
+  - exchange write path without explicit approval
+  - watchlist / promotion / ownership mutation in shared live environment
+  - secrets mirrored into repo

@@ -15,6 +15,7 @@ import (
 	"quantlab/internal/platform/mcp"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	"quantlab/internal/platform/truth"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
 )
@@ -78,6 +79,11 @@ func main() {
 		Backtests:      backtests,
 		Promotions:     promotions,
 		Live:           liveOps,
+		Truth: truth.NewStore(truth.StoreConfig{
+			SiteFactsPath:      filepath.Clean(filepath.Join(filepath.Dir(*configPath), "platform", "site-facts.yaml")),
+			OperatorPolicyPath: filepath.Clean(filepath.Join(filepath.Dir(*configPath), "platform", "operator-policy.yaml")),
+			LeadersPath:        filepath.Clean(filepath.Join(filepath.Dir(*configPath), "platform", "leaders.yaml")),
+		}),
 		WriteAuthToken: *writeToken,
 	})
 	if err := server.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {

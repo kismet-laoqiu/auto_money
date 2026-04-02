@@ -20,6 +20,7 @@ import (
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	"quantlab/internal/platform/truth"
 	watchlistsvc "quantlab/internal/platform/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
@@ -96,6 +97,11 @@ func main() {
 			Live:       liveOps,
 			Dashboard:  dashboardService,
 			Watchlist:  watchlistService,
+			Truth: truth.NewStore(truth.StoreConfig{
+				SiteFactsPath:      filepath.Clean(filepath.Join(filepath.Dir(*configPath), "platform", "site-facts.yaml")),
+				OperatorPolicyPath: filepath.Clean(filepath.Join(filepath.Dir(*configPath), "platform", "operator-policy.yaml")),
+				LeadersPath:        filepath.Clean(filepath.Join(filepath.Dir(*configPath), "platform", "leaders.yaml")),
+			}),
 		}),
 	}
 

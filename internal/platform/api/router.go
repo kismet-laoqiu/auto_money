@@ -13,6 +13,7 @@ import (
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	"quantlab/internal/platform/truth"
 	watchlistsvc "quantlab/internal/platform/watchlist"
 	basewatchlist "quantlab/internal/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
@@ -38,6 +39,7 @@ type HandlerConfig struct {
 	Live       LiveOps
 	Dashboard  DashboardService
 	Watchlist  WatchlistService
+	Truth      TruthService
 }
 
 type BacktestRunner interface {
@@ -74,6 +76,12 @@ type WatchlistService interface {
 	SymbolsText() (string, error)
 	SaveSymbols(raw string) (basewatchlist.File, error)
 	Apply(ctx context.Context) (watchlistsvc.ApplyResult, error)
+}
+
+type TruthService interface {
+	SiteFacts(ctx context.Context) (truth.SiteFacts, error)
+	OperatorPolicy(ctx context.Context) (truth.OperatorPolicy, error)
+	Leaders(ctx context.Context) (truth.LeadersFile, error)
 }
 
 type StrategyRegistry interface {
@@ -157,6 +165,15 @@ func NewHandler(cfg HandlerConfig) http.Handler {
 	})
 	mux.HandleFunc("/api/dashboard", func(writer http.ResponseWriter, request *http.Request) {
 		handleDashboardJSON(writer, request, cfg.Dashboard)
+	})
+	mux.HandleFunc("/api/operator/facts", func(writer http.ResponseWriter, request *http.Request) {
+		handleOperatorFacts(writer, request, cfg.Truth)
+	})
+	mux.HandleFunc("/api/operator/policy", func(writer http.ResponseWriter, request *http.Request) {
+		handleOperatorPolicy(writer, request, cfg.Truth)
+	})
+	mux.HandleFunc("/api/operator/leaders", func(writer http.ResponseWriter, request *http.Request) {
+		handleOperatorLeaders(writer, request, cfg.Truth)
 	})
 	mux.HandleFunc("/api/watchlist/save", func(writer http.ResponseWriter, request *http.Request) {
 		handleWatchlistSave(writer, request, cfg.Dashboard, cfg.Watchlist)
@@ -327,6 +344,45 @@ func handleDashboardJSON(writer http.ResponseWriter, request *http.Request, dash
 		return
 	}
 	writeJSON(writer, http.StatusOK, report)
+}
+
+func handleOperatorFacts(writer http.ResponseWriter, request *http.Request, service TruthService) {
+	if service == nil {
+		writeError(writer, http.StatusInternalServerError, "truth service is nil")
+		return
+	}
+	facts, err := service.SiteFacts(request.Context())
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, facts)
+}
+
+func handleOperatorPolicy(writer http.ResponseWriter, request *http.Request, service TruthService) {
+	if service == nil {
+		writeError(writer, http.StatusInternalServerError, "truth service is nil")
+		return
+	}
+	policy, err := service.OperatorPolicy(request.Context())
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, policy)
+}
+
+func handleOperatorLeaders(writer http.ResponseWriter, request *http.Request, service TruthService) {
+	if service == nil {
+		writeError(writer, http.StatusInternalServerError, "truth service is nil")
+		return
+	}
+	leaders, err := service.Leaders(request.Context())
+	if err != nil {
+		writeError(writer, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(writer, http.StatusOK, leaders)
 }
 
 func handleWatchlistSave(writer http.ResponseWriter, request *http.Request, dashboard DashboardService, watchlist WatchlistService) {

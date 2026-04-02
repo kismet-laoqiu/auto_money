@@ -13,6 +13,7 @@ import (
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	"quantlab/internal/platform/truth"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
 	"quantlab/internal/trader"
@@ -53,6 +54,14 @@ type LiveOps interface {
 	FlattenSymbol(ctx context.Context, symbol string) (live.FlattenResult, error)
 }
 
+type TruthService interface {
+	SiteFacts(ctx context.Context) (truth.SiteFacts, error)
+	OperatorPolicy(ctx context.Context) (truth.OperatorPolicy, error)
+	Leaders(ctx context.Context) (truth.LeadersFile, error)
+	LeaderScore(ctx context.Context, address string) (truth.Leader, error)
+	UpsertLeaderScore(ctx context.Context, input truth.LeaderScoreInput) (truth.Leader, error)
+}
+
 type Config struct {
 	Store          Reader
 	Query          QueryService
@@ -60,6 +69,7 @@ type Config struct {
 	Backtests      BacktestRunner
 	Promotions     PromotionManager
 	Live           LiveOps
+	Truth          TruthService
 	WriteAuthToken string
 	ServerName     string
 	ServerVersion  string
@@ -279,6 +289,38 @@ func (server *Server) toolDefinitions() []toolDef {
 			ReadOnly:    true,
 			Handler:     server.handleReadStrategyVersions,
 		},
+		{
+			Name:        "quant_read_site_facts",
+			Title:       "Quant Read Site Facts",
+			Description: "Read repo truth-layer site facts for the current ECS runtime.",
+			InputSchema: objectSchema(nil, nil),
+			ReadOnly:    true,
+			Handler:     server.handleReadSiteFacts,
+		},
+		{
+			Name:        "quant_read_operator_policy",
+			Title:       "Quant Read Operator Policy",
+			Description: "Read operator write-policy and channel rules.",
+			InputSchema: objectSchema(nil, nil),
+			ReadOnly:    true,
+			Handler:     server.handleReadOperatorPolicy,
+		},
+		{
+			Name:        "quant_read_leaders",
+			Title:       "Quant Read Leaders",
+			Description: "Read configured leader entries.",
+			InputSchema: objectSchema(nil, nil),
+			ReadOnly:    true,
+			Handler:     server.handleReadLeaders,
+		},
+		{
+			Name:        "quant_read_leader_score",
+			Title:       "Quant Read Leader Score",
+			Description: "Read one leader score by address.",
+			InputSchema: objectSchema(map[string]any{"address": stringSchema()}, []string{"address"}),
+			ReadOnly:    true,
+			Handler:     server.handleReadLeaderScore,
+		},
 	}
 	if server.cfg.WriteAuthToken == "" {
 		return tools
@@ -307,6 +349,23 @@ func (server *Server) toolDefinitions() []toolDef {
 			InputSchema: objectSchema(map[string]any{"symbol": stringSchema(), "auth_token": stringSchema()}, []string{"symbol", "auth_token"}),
 			ReadOnly:    false,
 			Handler:     server.handleWriteLiveFlatten,
+		},
+		toolDef{
+			Name:        "quant_write_leader_score",
+			Title:       "Quant Write Leader Score",
+			Description: "Upsert one leader score into leaders.yaml. Requires auth_token.",
+			InputSchema: objectSchema(map[string]any{
+				"address":    stringSchema(),
+				"label":      stringSchema(),
+				"status":     stringSchema(),
+				"total":      map[string]any{"type": "number"},
+				"grade":      stringSchema(),
+				"note":       stringSchema(),
+				"components": map[string]any{"type": "object"},
+				"auth_token": stringSchema(),
+			}, []string{"address", "total", "auth_token"}),
+			ReadOnly: false,
+			Handler:  server.handleWriteLeaderScore,
 		},
 	)
 }
@@ -440,6 +499,54 @@ func (server *Server) handleReadStrategyVersions(_ context.Context, args map[str
 	return map[string]any{"versions": versions}, nil
 }
 
+func (server *Server) handleReadSiteFacts(ctx context.Context, _ map[string]any) (map[string]any, error) {
+	if server.cfg.Truth == nil {
+		return nil, fmt.Errorf("truth service is nil")
+	}
+	facts, err := server.cfg.Truth.SiteFacts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return structToObject(facts)
+}
+
+func (server *Server) handleReadOperatorPolicy(ctx context.Context, _ map[string]any) (map[string]any, error) {
+	if server.cfg.Truth == nil {
+		return nil, fmt.Errorf("truth service is nil")
+	}
+	policy, err := server.cfg.Truth.OperatorPolicy(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return structToObject(policy)
+}
+
+func (server *Server) handleReadLeaders(ctx context.Context, _ map[string]any) (map[string]any, error) {
+	if server.cfg.Truth == nil {
+		return nil, fmt.Errorf("truth service is nil")
+	}
+	leaders, err := server.cfg.Truth.Leaders(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return structToObject(leaders)
+}
+
+func (server *Server) handleReadLeaderScore(ctx context.Context, args map[string]any) (map[string]any, error) {
+	if server.cfg.Truth == nil {
+		return nil, fmt.Errorf("truth service is nil")
+	}
+	address, err := requiredStringArg(args, "address")
+	if err != nil {
+		return nil, err
+	}
+	leader, err := server.cfg.Truth.LeaderScore(ctx, address)
+	if err != nil {
+		return nil, err
+	}
+	return structToObject(leader)
+}
+
 func (server *Server) handleWriteBacktestRun(ctx context.Context, args map[string]any) (map[string]any, error) {
 	if err := server.authorize(args); err != nil {
 		return nil, err
@@ -513,6 +620,44 @@ func (server *Server) handleWriteLiveFlatten(ctx context.Context, args map[strin
 		return nil, err
 	}
 	return structToObject(result)
+}
+
+func (server *Server) handleWriteLeaderScore(ctx context.Context, args map[string]any) (map[string]any, error) {
+	if err := server.authorize(args); err != nil {
+		return nil, err
+	}
+	if server.cfg.Truth == nil {
+		return nil, fmt.Errorf("truth service is nil")
+	}
+	address, err := requiredStringArg(args, "address")
+	if err != nil {
+		return nil, err
+	}
+	total, err := floatArg(args, "total")
+	if err != nil {
+		return nil, err
+	}
+	label, _ := optionalStringArg(args, "label")
+	status, _ := optionalStringArg(args, "status")
+	grade, _ := optionalStringArg(args, "grade")
+	note, _ := optionalStringArg(args, "note")
+	components, err := componentsArg(args, "components")
+	if err != nil {
+		return nil, err
+	}
+	leader, err := server.cfg.Truth.UpsertLeaderScore(ctx, truth.LeaderScoreInput{
+		Address:    address,
+		Label:      label,
+		Status:     status,
+		Total:      total,
+		Grade:      grade,
+		Note:       note,
+		Components: components,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return structToObject(leader)
 }
 
 func (server *Server) authorize(args map[string]any) error {
@@ -625,6 +770,38 @@ func intArg(args map[string]any, key string, fallback int) (int, error) {
 		return 0, fmt.Errorf("%s must be integer", key)
 	}
 	return int(number), nil
+}
+
+func floatArg(args map[string]any, key string) (float64, error) {
+	value, ok := args[key]
+	if !ok {
+		return 0, fmt.Errorf("%s is required", key)
+	}
+	number, ok := value.(float64)
+	if !ok {
+		return 0, fmt.Errorf("%s must be number", key)
+	}
+	return number, nil
+}
+
+func componentsArg(args map[string]any, key string) (map[string]float64, error) {
+	value, ok := args[key]
+	if !ok {
+		return nil, nil
+	}
+	items, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s must be object", key)
+	}
+	out := make(map[string]float64, len(items))
+	for name, raw := range items {
+		number, ok := raw.(float64)
+		if !ok {
+			return nil, fmt.Errorf("%s.%s must be number", key, name)
+		}
+		out[name] = number
+	}
+	return out, nil
 }
 
 func objectSchema(properties map[string]any, required []string) map[string]any {

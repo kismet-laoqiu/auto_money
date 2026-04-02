@@ -1,0 +1,18 @@
+write_actions_require_confirmation:
+  - flatten_symbol
+  - flatten_all
+  - approve_shadow
+  - approve_canary
+  - approve_live
+  - rollback
+  - increase_cap
+channels:
+  web:
+    public_read_only: true
+    private_write_required: true
+  telegram:
+    mode: single_operator_allowlist
+  dingtalk:
+    mode: alerts_and_approvals
+default_language: zh-CN
+timezone: Asia/Shanghai

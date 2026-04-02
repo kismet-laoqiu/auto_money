@@ -10,6 +10,7 @@ import (
 
 	"quantlab/internal/backtest"
 	"quantlab/internal/platform/promotion"
+	"quantlab/internal/platform/truth"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/trader"
 )
@@ -68,9 +69,53 @@ func (service *stubLive) FlattenSymbol(_ context.Context, symbol string) (map[st
 	return map[string]any{"symbol": symbol, "status": "flat", "qty": 0.0}, nil
 }
 
+type stubTruth struct {
+	facts       truth.SiteFacts
+	policy      truth.OperatorPolicy
+	leaders     truth.LeadersFile
+	leader      truth.Leader
+	upserted    truth.LeaderScoreInput
+	upsertCalls int
+}
+
+func (stub *stubTruth) SiteFacts(context.Context) (truth.SiteFacts, error) {
+	return stub.facts, nil
+}
+
+func (stub *stubTruth) OperatorPolicy(context.Context) (truth.OperatorPolicy, error) {
+	return stub.policy, nil
+}
+
+func (stub *stubTruth) Leaders(context.Context) (truth.LeadersFile, error) {
+	return stub.leaders, nil
+}
+
+func (stub *stubTruth) LeaderScore(_ context.Context, address string) (truth.Leader, error) {
+	if stub.leader.Address == address {
+		return stub.leader, nil
+	}
+	return truth.Leader{}, nil
+}
+
+func (stub *stubTruth) UpsertLeaderScore(_ context.Context, input truth.LeaderScoreInput) (truth.Leader, error) {
+	stub.upsertCalls++
+	stub.upserted = input
+	stub.leader = truth.Leader{
+		Address: input.Address,
+		Label:   input.Label,
+		Score: truth.LeaderScore{
+			Total: input.Total,
+			Grade: input.Grade,
+			Note:  input.Note,
+		},
+	}
+	return stub.leader, nil
+}
+
 func TestServerInitializeListToolsAndReadStatus(t *testing.T) {
 	server := NewServer(Config{
 		Store:          stubStore{lastSeq: 7, checkpoint: trader.EngineState{ArmingState: trader.ArmingSafe}},
+		Truth:          &stubTruth{},
 		WriteAuthToken: "secret",
 	})
 	responses := runServerScript(t, server,
@@ -107,7 +152,7 @@ func TestServerInitializeListToolsAndReadStatus(t *testing.T) {
 		} `json:"result"`
 	}
 	decodeLine(t, responses[1], &listResp)
-	if !containsTool(listResp.Result.Tools, "quant_read_status") || !containsTool(listResp.Result.Tools, "quant_write_backtest_run") {
+	if !containsTool(listResp.Result.Tools, "quant_read_status") || !containsTool(listResp.Result.Tools, "quant_read_site_facts") || !containsTool(listResp.Result.Tools, "quant_write_leader_score") {
 		t.Fatalf("unexpected tools list: %+v", listResp.Result.Tools)
 	}
 	var callResp struct {
@@ -171,6 +216,50 @@ func TestServerWriteToolBacktestRunAuthorized(t *testing.T) {
 	}
 	if got := callResp.Result.StructuredContent["final_score"].(float64); got != 0.91 {
 		t.Fatalf("unexpected backtest payload: %+v", callResp.Result.StructuredContent)
+	}
+}
+
+func TestServerReadsTruthLayerAndWritesLeaderScore(t *testing.T) {
+	truthStore := &stubTruth{
+		facts: truth.SiteFacts{
+			RepoRoot:      "/repo",
+			PrimaryBranch: "autoresearch/20260328-all-plan",
+		},
+		policy: truth.OperatorPolicy{
+			WriteActionsRequireConfirmation: []string{"flatten_symbol"},
+		},
+		leaders: truth.LeadersFile{
+			Hyperliquid: []truth.Leader{{
+				Address: "0xabc",
+				Label:   "alpha",
+				Score:   truth.LeaderScore{Total: 88, Grade: "A"},
+			}},
+		},
+		leader: truth.Leader{
+			Address: "0xabc",
+			Label:   "alpha",
+			Score:   truth.LeaderScore{Total: 88, Grade: "A"},
+		},
+	}
+	server := NewServer(Config{Truth: truthStore, WriteAuthToken: "secret"})
+	responses := runServerScript(t, server,
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"tester","version":"1.0.0"}}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"quant_read_site_facts","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"quant_read_leader_score","arguments":{"address":"0xabc"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"quant_write_leader_score","arguments":{"address":"0xdef","label":"beta","total":91.5,"grade":"A","note":"copyable","auth_token":"secret"}}}`,
+	)
+	if len(responses) != 4 {
+		t.Fatalf("unexpected responses: %d", len(responses))
+	}
+	if !strings.Contains(responses[1], `"repo_root":"/repo"`) {
+		t.Fatalf("unexpected site facts payload: %s", responses[1])
+	}
+	if !strings.Contains(responses[2], `"address":"0xabc"`) || !strings.Contains(responses[2], `"grade":"A"`) {
+		t.Fatalf("unexpected leader score payload: %s", responses[2])
+	}
+	if !strings.Contains(responses[3], `"address":"0xdef"`) || truthStore.upsertCalls != 1 || truthStore.upserted.Address != "0xdef" {
+		t.Fatalf("unexpected write leader result: payload=%s upsert=%+v calls=%d", responses[3], truthStore.upserted, truthStore.upsertCalls)
 	}
 }
 

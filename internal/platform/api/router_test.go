@@ -17,6 +17,7 @@ import (
 	"quantlab/internal/platform/live"
 	"quantlab/internal/platform/promotion"
 	"quantlab/internal/platform/query"
+	"quantlab/internal/platform/truth"
 	watchlistsvc "quantlab/internal/platform/watchlist"
 	sqlitepkg "quantlab/internal/store/sqlite"
 	"quantlab/internal/strategybundle"
@@ -439,6 +440,52 @@ func TestRouterDashboardJSON(t *testing.T) {
 	}
 }
 
+func TestRouterOperatorFactsPolicyAndLeaders(t *testing.T) {
+	store := newTestStore(t)
+	handler := NewHandler(HandlerConfig{
+		Store: store,
+		Truth: stubTruthService{
+			facts: truth.SiteFacts{
+				RepoRoot:      "/repo",
+				PrimaryBranch: "autoresearch/20260328-all-plan",
+			},
+			policy: truth.OperatorPolicy{
+				WriteActionsRequireConfirmation: []string{"flatten_symbol"},
+				DefaultLanguage:                 "zh-CN",
+				Timezone:                        "Asia/Shanghai",
+			},
+			leaders: truth.LeadersFile{
+				Hyperliquid: []truth.Leader{{
+					Address: "0xabc",
+					Label:   "alpha",
+					Score:   truth.LeaderScore{Total: 88, Grade: "A"},
+				}},
+			},
+		},
+	})
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/operator/facts", nil)
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"repo_root":"/repo"`) {
+		t.Fatalf("unexpected facts payload: code=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/api/operator/policy", nil)
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"default_language":"zh-CN"`) {
+		t.Fatalf("unexpected policy payload: code=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodGet, "/api/operator/leaders", nil)
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"address":"0xabc"`) {
+		t.Fatalf("unexpected leaders payload: code=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+}
+
 func TestRouterWatchlistSaveHTML(t *testing.T) {
 	store := newTestStore(t)
 	recorder := httptest.NewRecorder()
@@ -659,6 +706,25 @@ func (service stubDashboardService) Report(context.Context) (insights.DashboardR
 
 func (service stubDashboardService) RenderHTML(context.Context, string, string) (string, error) {
 	return service.html, service.err
+}
+
+type stubTruthService struct {
+	facts   truth.SiteFacts
+	policy  truth.OperatorPolicy
+	leaders truth.LeadersFile
+	err     error
+}
+
+func (service stubTruthService) SiteFacts(context.Context) (truth.SiteFacts, error) {
+	return service.facts, service.err
+}
+
+func (service stubTruthService) OperatorPolicy(context.Context) (truth.OperatorPolicy, error) {
+	return service.policy, service.err
+}
+
+func (service stubTruthService) Leaders(context.Context) (truth.LeadersFile, error) {
+	return service.leaders, service.err
 }
 
 type stubWatchlistService struct {
